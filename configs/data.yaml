@@ -1,0 +1,36 @@
+raw_data_path: skyguard_india_30stations_50k_faulted20pct without Fault.csv
+processed_dir: data/processed
+artifacts_dir: artifacts
+reports_dir: reports
+
+sensor_columns:
+  - temperature_c
+  - relative_humidity_pct
+  - pressure_hpa
+  - wind_speed_kmh
+  - rainfall_mm
+
+target_column: ground_truth_label
+fault_column: fault_description
+station_column: station_id
+timestamp_column: timestamp
+
+label_map:
+  NORMAL: 0
+  GENUINE_EXTREME: 1
+  SENSOR_FAULT: 2
+
+physical_bounds:
+  temperature_c: [-20.0, 60.0]
+  relative_humidity_pct: [0.0, 100.0]
+  pressure_hpa: [700.0, 1084.0]
+  wind_speed_kmh: [0.0, 200.0]
+  rainfall_mm: [0.0, 500.0]
+
+split:
+  train_frac: 0.60
+  val_frac: 0.20
+  test_frac: 0.20
+  strategy: chronological
+
+random_seed: 42

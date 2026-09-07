@@ -1,0 +1,454 @@
+{
+  "model_version": "v2.0-multimodel-20260902-114701",
+  "train_date": "2026-09-02T11:47:01.039521",
+  "random_seed": 42,
+  "decision_model": "xgboost",
+  "val_macro_f1": 0.9978054813725451,
+  "val_metrics": {
+    "macro_f1": 0.9978054813725451,
+    "weighted_f1": 0.9998036514968546,
+    "per_class": {
+      "GENUINE_EXTREME": {
+        "precision": 0.989247311827957,
+        "recall": 1.0,
+        "f1-score": 0.9945945945945946,
+        "support": 92.0
+      },
+      "NORMAL": {
+        "precision": 1.0,
+        "recall": 0.999791948403204,
+        "f1-score": 0.9998959633791095,
+        "support": 9613.0
+      },
+      "SENSOR_FAULT": {
+        "precision": 0.9978540772532188,
+        "recall": 1.0,
+        "f1-score": 0.9989258861439313,
+        "support": 465.0
+      },
+      "accuracy": 0.999803343166175,
+      "macro avg": {
+        "precision": 0.9957004630270586,
+        "recall": 0.9999306494677347,
+        "f1-score": 0.9978054813725451,
+        "support": 10170.0
+      },
+      "weighted avg": {
+        "precision": 0.9998046114661671,
+        "recall": 0.999803343166175,
+        "f1-score": 0.9998036514968546,
+        "support": 10170.0
+      }
+    },
+    "confusion_matrix": [
+      [
+        92,
+        0,
+        0
+      ],
+      [
+        1,
+        9611,
+        1
+      ],
+      [
+        0,
+        0,
+        465
+      ]
+    ],
+    "pr_auc": {
+      "GENUINE_EXTREME": 0.9996435817842615,
+      "NORMAL": 0.9999996005082549,
+      "SENSOR_FAULT": 0.9998911485914787
+    },
+    "false_alarm_rate": {
+      "GENUINE_EXTREME": 9.922603691208574e-05,
+      "NORMAL": 0.0,
+      "SENSOR_FAULT": 0.00010303967027305513
+    }
+  },
+  "expected_models": {
+    "temperature_c": {
+      "target": "temperature_c",
+      "weights": {
+        "ridge": 0.1409,
+        "random_forest": 0.1675,
+        "extra_trees": 0.1608,
+        "hist_gradient_boosting": 0.1834,
+        "gradient_boosting": 0.1639,
+        "xgboost": 0.1835
+      },
+      "summary_metrics": {
+        "mae": 2.2869,
+        "rmse": 4.0343,
+        "r2": 0.5706,
+        "best_single_model": "xgboost",
+        "best_single_mae": 2.1824
+      },
+      "candidate_metrics": {
+        "ridge": {
+          "mae": 2.8408,
+          "rmse": 4.4542,
+          "r2": 0.4765
+        },
+        "random_forest": {
+          "mae": 2.3899,
+          "rmse": 4.1115,
+          "r2": 0.554
+        },
+        "extra_trees": {
+          "mae": 2.4898,
+          "rmse": 4.195,
+          "r2": 0.5357
+        },
+        "hist_gradient_boosting": {
+          "mae": 2.1833,
+          "rmse": 3.957,
+          "r2": 0.5869
+        },
+        "gradient_boosting": {
+          "mae": 2.4431,
+          "rmse": 4.1526,
+          "r2": 0.545
+        },
+        "xgboost": {
+          "mae": 2.1824,
+          "rmse": 3.9542,
+          "r2": 0.5875
+        }
+      },
+      "best_single_model": "xgboost"
+    },
+    "relative_humidity_pct": {
+      "target": "relative_humidity_pct",
+      "weights": {
+        "ridge": 0.1274,
+        "random_forest": 0.1787,
+        "extra_trees": 0.1689,
+        "hist_gradient_boosting": 0.181,
+        "gradient_boosting": 0.166,
+        "xgboost": 0.178
+      },
+      "summary_metrics": {
+        "mae": 7.4454,
+        "rmse": 10.3905,
+        "r2": 0.6696,
+        "best_single_model": "hist_gradient_boosting",
+        "best_single_mae": 7.2042
+      },
+      "candidate_metrics": {
+        "ridge": {
+          "mae": 10.2341,
+          "rmse": 13.2687,
+          "r2": 0.4611
+        },
+        "random_forest": {
+          "mae": 7.2943,
+          "rmse": 10.2789,
+          "r2": 0.6766
+        },
+        "extra_trees": {
+          "mae": 7.7212,
+          "rmse": 10.7889,
+          "r2": 0.6437
+        },
+        "hist_gradient_boosting": {
+          "mae": 7.2042,
+          "rmse": 10.1156,
+          "r2": 0.6868
+        },
+        "gradient_boosting": {
+          "mae": 7.8565,
+          "rmse": 10.8841,
+          "r2": 0.6374
+        },
+        "xgboost": {
+          "mae": 7.3231,
+          "rmse": 10.2801,
+          "r2": 0.6765
+        }
+      },
+      "best_single_model": "hist_gradient_boosting"
+    },
+    "pressure_hpa": {
+      "target": "pressure_hpa",
+      "weights": {
+        "ridge": 0.0433,
+        "random_forest": 0.2404,
+        "extra_trees": 0.141,
+        "hist_gradient_boosting": 0.2229,
+        "gradient_boosting": 0.1382,
+        "xgboost": 0.2142
+      },
+      "summary_metrics": {
+        "mae": 4.985,
+        "rmse": 7.6924,
+        "r2": 0.982,
+        "best_single_model": "random_forest",
+        "best_single_mae": 4.0432
+      },
+      "candidate_metrics": {
+        "ridge": {
+          "mae": 22.4217,
+          "rmse": 28.735,
+          "r2": 0.7482
+        },
+        "random_forest": {
+          "mae": 4.0432,
+          "rmse": 6.8765,
+          "r2": 0.9856
+        },
+        "extra_trees": {
+          "mae": 6.8906,
+          "rmse": 9.8587,
+          "r2": 0.9704
+        },
+        "hist_gradient_boosting": {
+          "mae": 4.3609,
+          "rmse": 7.556,
+          "r2": 0.9826
+        },
+        "gradient_boosting": {
+          "mae": 7.0318,
+          "rmse": 9.9207,
+          "r2": 0.97
+        },
+        "xgboost": {
+          "mae": 4.5378,
+          "rmse": 7.6745,
+          "r2": 0.982
+        }
+      },
+      "best_single_model": "random_forest"
+    }
+  },
+  "anomaly_detectors": {
+    "isolation_forest": {
+      "active": true,
+      "weight": 0.25,
+      "threshold": 0.5
+    },
+    "lof": {
+      "active": true,
+      "weight": 0.2,
+      "threshold": 1.679505628410254
+    },
+    "one_class_svm": {
+      "active": true,
+      "weight": 0.2,
+      "threshold": 0.5
+    },
+    "elliptic_envelope": {
+      "active": true,
+      "weight": 0.15,
+      "threshold": 0.5
+    },
+    "mahalanobis": {
+      "active": true,
+      "weight": 0.1,
+      "threshold": 11.19019654143705
+    },
+    "robust_zscore": {
+      "active": true,
+      "weight": 0.1,
+      "threshold": 0.5
+    },
+    "autoencoder": {
+      "active": false,
+      "weight": 0.0,
+      "threshold": 0.5
+    }
+  },
+  "model_registry": [
+    {
+      "name": "Temperature Regression Ensemble",
+      "type": "expected_value_ensemble",
+      "target": "temperature_c",
+      "enabled": true,
+      "status": "ACTIVE",
+      "training_samples": 30075,
+      "candidates": [
+        "ridge",
+        "random_forest",
+        "extra_trees",
+        "xgboost",
+        "gradient_boosting",
+        "hist_gradient_boosting"
+      ],
+      "weights": {
+        "ridge": 0.1409,
+        "random_forest": 0.1675,
+        "extra_trees": 0.1608,
+        "hist_gradient_boosting": 0.1834,
+        "gradient_boosting": 0.1639,
+        "xgboost": 0.1835
+      },
+      "val_mae": 2.2869,
+      "val_rmse": 4.0343,
+      "val_r2": 0.5706,
+      "purpose": "Predict expected temperature and calculate atmospheric residuals"
+    },
+    {
+      "name": "Relative Humidity Regression Ensemble",
+      "type": "expected_value_ensemble",
+      "target": "relative_humidity_pct",
+      "enabled": true,
+      "status": "ACTIVE",
+      "training_samples": 30075,
+      "candidates": [
+        "ridge",
+        "random_forest",
+        "extra_trees",
+        "xgboost",
+        "gradient_boosting",
+        "hist_gradient_boosting"
+      ],
+      "weights": {
+        "ridge": 0.1274,
+        "random_forest": 0.1787,
+        "extra_trees": 0.1689,
+        "hist_gradient_boosting": 0.181,
+        "gradient_boosting": 0.166,
+        "xgboost": 0.178
+      },
+      "val_mae": 7.4454,
+      "val_rmse": 10.3905,
+      "val_r2": 0.6696,
+      "purpose": "Predict expected relative humidity and calculate atmospheric residuals"
+    },
+    {
+      "name": "Barometric Pressure Regression Ensemble",
+      "type": "expected_value_ensemble",
+      "target": "pressure_hpa",
+      "enabled": true,
+      "status": "ACTIVE",
+      "training_samples": 30075,
+      "candidates": [
+        "ridge",
+        "random_forest",
+        "extra_trees",
+        "xgboost",
+        "gradient_boosting",
+        "hist_gradient_boosting"
+      ],
+      "weights": {
+        "ridge": 0.0433,
+        "random_forest": 0.2404,
+        "extra_trees": 0.141,
+        "hist_gradient_boosting": 0.2229,
+        "gradient_boosting": 0.1382,
+        "xgboost": 0.2142
+      },
+      "val_mae": 4.985,
+      "val_rmse": 7.6924,
+      "val_r2": 0.982,
+      "purpose": "Predict expected barometric pressure and detect pressure anomalies"
+    },
+    {
+      "name": "Isolation Forest",
+      "type": "unsupervised_anomaly",
+      "enabled": true,
+      "status": "ACTIVE",
+      "weight": 0.25,
+      "training_samples": 30075,
+      "purpose": "Global outlier isolation through recursive random partitioning"
+    },
+    {
+      "name": "Local Outlier Factor (LOF)",
+      "type": "unsupervised_anomaly",
+      "enabled": true,
+      "status": "ACTIVE",
+      "weight": 0.2,
+      "training_samples": 30075,
+      "purpose": "Local density-based outlier detection for non-uniform clusters"
+    },
+    {
+      "name": "One-Class SVM",
+      "type": "unsupervised_anomaly",
+      "enabled": true,
+      "status": "ACTIVE",
+      "weight": 0.2,
+      "training_samples": 30075,
+      "purpose": "Nonlinear support vector boundary estimation for normal observations"
+    },
+    {
+      "name": "Elliptic Envelope",
+      "type": "unsupervised_anomaly",
+      "enabled": true,
+      "status": "ACTIVE",
+      "weight": 0.15,
+      "training_samples": 30075,
+      "purpose": "Fast Minimum Covariance Determinant (MCD) robust ellipsoid fitting"
+    },
+    {
+      "name": "Mahalanobis Covariance Distance",
+      "type": "multivariate_anomaly",
+      "enabled": true,
+      "status": "ACTIVE",
+      "weight": 0.1,
+      "training_samples": 30075,
+      "purpose": "Multivariate inter-sensor covariance distance measurement"
+    },
+    {
+      "name": "Statistical Robust Z-Score",
+      "type": "statistical_qc",
+      "enabled": true,
+      "status": "ACTIVE",
+      "weight": 0.1,
+      "training_samples": 30075,
+      "purpose": "Per-hour station median and MAD robust standardized deviations"
+    },
+    {
+      "name": "Autoencoder Neural Detector",
+      "type": "deep_learning_anomaly",
+      "enabled": false,
+      "status": "DISABLED",
+      "weight": 0.0,
+      "training_samples": 0,
+      "purpose": "Non-linear bottleneck reconstruction (optional deep learning module)",
+      "safety_note": "Multi-model tree and robust statistical ensemble prioritized for operational stability and explainability."
+    },
+    {
+      "name": "LSTM / GRU Temporal Sequence Model",
+      "type": "deep_learning_temporal",
+      "enabled": false,
+      "status": "DISABLED",
+      "weight": 0.0,
+      "training_samples": 0,
+      "purpose": "Recurrent sequence forecasting (optional deep learning module)",
+      "safety_note": "Tree ensemble regression suite utilized for real-time inference efficiency."
+    },
+    {
+      "name": "Fault Evidence Engine",
+      "type": "fault_diagnostics",
+      "enabled": true,
+      "status": "ACTIVE",
+      "training_samples": 30075,
+      "purpose": "Heuristic and supervised diagnosis of DRIFT, FREEZE, SPIKE, and COMMUNICATION faults"
+    },
+    {
+      "name": "Genuine Weather Event Engine",
+      "type": "event_intelligence",
+      "enabled": true,
+      "status": "ACTIVE",
+      "training_samples": 30075,
+      "purpose": "Multi-station spatial agreement and atmospheric front physical consistency"
+    },
+    {
+      "name": "Master Evidence Fusion",
+      "type": "decision_fusion",
+      "enabled": true,
+      "status": "ACTIVE",
+      "training_samples": 30075,
+      "purpose": "Central multi-model consensus, uncertainty quantification, and decision classification"
+    }
+  ],
+  "dataset_info": {
+    "total_samples": 50000,
+    "train_samples": 30075,
+    "stations_count": 30,
+    "temporal_span_days": 70,
+    "deep_learning_safely_disabled": true
+  }
+}

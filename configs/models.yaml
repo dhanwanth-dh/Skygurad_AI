@@ -1,0 +1,148 @@
+random_seed: 42
+
+expected_value:
+  candidates:
+    - ridge
+    - random_forest
+    - extra_trees
+    - xgboost
+    - gradient_boosting
+    - hist_gradient_boosting
+  ridge:
+    alpha: 1.0
+  random_forest:
+    n_estimators: 100
+    max_depth: 6
+    min_samples_leaf: 3
+    random_state: 42
+  extra_trees:
+    n_estimators: 100
+    max_depth: 6
+    min_samples_leaf: 3
+    random_state: 42
+  xgboost:
+    n_estimators: 100
+    max_depth: 4
+    learning_rate: 0.05
+    subsample: 0.8
+    random_state: 42
+  gradient_boosting:
+    n_estimators: 100
+    max_depth: 4
+    learning_rate: 0.05
+    random_state: 42
+  hist_gradient_boosting:
+    max_iter: 100
+    max_depth: 4
+    learning_rate: 0.05
+    random_state: 42
+  lightgbm:
+    enabled: false
+  min_r2_threshold: -0.5
+  weighting_strategy: inverse_mae
+
+temporal:
+  lstm:
+    enabled: false
+    min_samples: 5000
+    hidden_dim: 32
+    num_layers: 2
+  gru:
+    enabled: false
+    min_samples: 5000
+
+anomaly:
+  isolation_forest:
+    enabled: true
+    n_estimators: 100
+    contamination: 0.05
+    random_state: 42
+    weight: 0.25
+  lof:
+    enabled: true
+    n_neighbors: 5
+    contamination: 0.05
+    weight: 0.20
+  one_class_svm:
+    enabled: true
+    nu: 0.05
+    kernel: rbf
+    gamma: scale
+    weight: 0.20
+  elliptic_envelope:
+    enabled: true
+    contamination: 0.05
+    support_fraction: 0.8
+    random_state: 42
+    weight: 0.15
+  mahalanobis:
+    enabled: true
+    weight: 0.10
+  robust_zscore:
+    enabled: true
+    threshold: 3.0
+    weight: 0.10
+  autoencoder:
+    enabled: false
+    min_samples: 5000
+    latent_dim: 8
+    weight: 0.0
+
+qc:
+  enabled: true
+  rate_of_change_max_temp: 5.0
+  rate_of_change_max_pressure: 10.0
+  rate_of_change_max_humidity: 25.0
+  freeze_variance_threshold: 0.01
+  freeze_min_consecutive: 3
+  spike_zscore_threshold: 4.0
+  drift_consecutive_threshold: 5
+  temporal_gap_threshold_hours: 3.0
+
+decision:
+  candidates:
+    - logistic_regression
+    - random_forest
+    - xgboost
+  logistic_regression:
+    max_iter: 1000
+    class_weight: balanced
+    random_state: 42
+    C: 0.5
+  random_forest:
+    n_estimators: 200
+    max_depth: 6
+    min_samples_leaf: 2
+    class_weight: balanced
+    random_state: 42
+  xgboost:
+    n_estimators: 200
+    max_depth: 4
+    learning_rate: 0.05
+    subsample: 0.8
+    colsample_bytree: 0.8
+    random_state: 42
+
+fault_classifier:
+  min_samples_per_class: 5
+  random_forest:
+    n_estimators: 100
+    max_depth: 4
+    class_weight: balanced
+    random_state: 42
+
+weather_events:
+  min_spatial_agreement: 0.65
+  max_neighbor_residual_ratio: 0.5
+  temporal_coherence_weight: 0.3
+
+master_fusion:
+  weights:
+    anomaly_consensus: 0.30
+    expected_residual: 0.25
+    fault_evidence: 0.20
+    statistical_qc: 0.15
+    spatial_consistency: 0.10
+
+calibration:
+  method: sigmoid

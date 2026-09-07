@@ -1,0 +1,70 @@
+{
+  "accuracy": 0.9992824192721681,
+  "macro_f1": 0.9871928524241848,
+  "weighted_f1": 0.9992715705459917,
+  "per_class_report": {
+    "GENUINE_EXTREME": {
+      "precision": 1.0,
+      "recall": 0.9302325581395349,
+      "f1-score": 0.963855421686747,
+      "support": 86.0
+    },
+    "NORMAL": {
+      "precision": 0.9994542080558891,
+      "recall": 0.9998907939281424,
+      "f1-score": 0.9996724533245988,
+      "support": 9157.0
+    },
+    "SENSOR_FAULT": {
+      "precision": 0.9961089494163424,
+      "recall": 1.0,
+      "f1-score": 0.9980506822612085,
+      "support": 512.0
+    },
+    "accuracy": 0.9992824192721681,
+    "macro avg": {
+      "precision": 0.9985210524907439,
+      "recall": 0.9767077840225591,
+      "f1-score": 0.9871928524241848,
+      "support": 9755.0
+    },
+    "weighted avg": {
+      "precision": 0.9992834408271598,
+      "recall": 0.9992824192721681,
+      "f1-score": 0.9992715705459917,
+      "support": 9755.0
+    }
+  },
+  "confusion_matrix": [
+    [
+      80,
+      5,
+      1
+    ],
+    [
+      0,
+      9156,
+      1
+    ],
+    [
+      0,
+      0,
+      512
+    ]
+  ],
+  "pr_auc": {
+    "GENUINE_EXTREME": 0.9883824297814494,
+    "NORMAL": 0.9999984135027382,
+    "SENSOR_FAULT": 0.9998660638783046
+  },
+  "brier_score": {
+    "GENUINE_EXTREME": 0.000463366974145174,
+    "NORMAL": 0.0004924479871988297,
+    "SENSOR_FAULT": 0.00016112151206471026
+  },
+  "false_alarm_rate": {
+    "GENUINE_EXTREME": 0.0,
+    "NORMAL": 0.008361204013377926,
+    "SENSOR_FAULT": 0.00021637996321540625
+  }
+}

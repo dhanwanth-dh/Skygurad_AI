@@ -1,0 +1,33 @@
+lag_steps: [1, 2, 3]
+rolling_windows: [3, 6]
+
+lag_features:
+  - temperature_c
+  - relative_humidity_pct
+  - pressure_hpa
+  - wind_speed_kmh
+  - rainfall_mm
+
+delta_features:
+  - temperature_c
+  - relative_humidity_pct
+  - pressure_hpa
+  - wind_speed_kmh
+  - rainfall_mm
+
+rolling_features:
+  - temperature_c
+  - relative_humidity_pct
+  - pressure_hpa
+
+baseline_window: 24
+baseline_min_periods: 3
+
+spatial_k_neighbors: 2
+
+multivariate_features:
+  - temperature_c
+  - relative_humidity_pct
+  - pressure_hpa
+  - wind_speed_kmh
+  - rainfall_mm
