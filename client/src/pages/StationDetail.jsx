@@ -193,65 +193,241 @@ export default function StationDetail() {
 
       {/* Historical Sensor Charts */}
       <section className="space-y-4">
-        <div className="text-xs font-bold tracking-wider text-slate-400 uppercase">
-          Historical Telemetry & Anomaly Sequence
-        </div>
-        {histLoading ? (
-          <LoadingSkeleton rows={3} height="h-48" />
-        ) : histError ? (
-          <ErrorState message={histError} />
-        ) : histData?.records?.length > 0 ? (
-          <HistoricalCharts records={histData.records} />
-        ) : (
-          <div className="glass-panel p-8 text-center rounded-3xl text-xs font-semibold text-slate-400">
-            No historical telemetry records found.
-          </div>
-        )}
+        <HistoricalTelemetrySection stationId={id} stationMeta={station} />
       </section>
     </motion.div>
   )
 }
 
-function HistoricalCharts({ records }) {
-  const step = Math.max(1, Math.floor(records.length / 80))
-  const data = records
-    .filter((_, i) => i % step === 0)
-    .map(r => ({
-      ts: r.timestamp.slice(5, 16),
-      temp: r.temperature_c,
-      humidity: r.relative_humidity_pct,
-      pressure: r.pressure_hpa,
-      label: r.ground_truth_label,
-      fault: r.fault_description,
-    }))
+function HistoricalTelemetrySection({ stationId, stationMeta }) {
+  const [range, setRange] = useState('ALL')
+  const [histData, setHistData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
-  const anomalyPoints = data.filter(d => d.label && d.label !== 'NORMAL')
+  const RANGES = [
+    { id: '24H', label: 'Last 24 Hours', days: 1 },
+    { id: '7D', label: 'Last 7 Days', days: 7 },
+    { id: '30D', label: 'Last 30 Days', days: 30 },
+    { id: '3M', label: 'Last 3 Months', days: 90 },
+    { id: '1Y', label: 'Last 1 Year', days: 365 },
+    { id: '5Y', label: 'Last 5 Years', days: 365 * 5 },
+    { id: '10Y', label: 'Last 10 Years', days: 365 * 10 },
+    { id: 'ALL', label: 'All Available', days: null },
+  ]
+
+  useEffect(() => {
+    setLoading(true)
+    setError(null)
+
+    const params = { max_points: 250 }
+    if (range !== 'ALL') {
+      const selected = RANGES.find(r => r.id === range)
+      if (selected && selected.days) {
+        const now = new Date()
+        const startDt = new Date(now.getTime() - selected.days * 24 * 60 * 60 * 1000)
+        params.start = startDt.toISOString().slice(0, 19).replace('T', ' ')
+      }
+    }
+
+    api.getHistoricalStationData(stationId, params)
+      .then(res => {
+        setHistData(res)
+        setLoading(false)
+      })
+      .catch(e => {
+        // Fallback to legacy history endpoint if needed
+        api.getStationHistory(stationId)
+          .then(legacy => {
+            setHistData({
+              station_id: stationId,
+              total_records: legacy.records?.length || 0,
+              displayed_points: legacy.records?.length || 0,
+              points: legacy.records || [],
+              anomalies: legacy.records?.filter(r => r.ground_truth_label && r.ground_truth_label !== 'NORMAL') || [],
+              latest_observation: legacy.records?.[legacy.records.length - 1] || null,
+            })
+            setLoading(false)
+          })
+          .catch(err => {
+            setError(err.message)
+            setLoading(false)
+          })
+      })
+  }, [stationId, range])
+
+  const points = histData?.points || []
+  const latestObs = histData?.latest_observation || stationMeta
+
+  const exportUrlXlsx = api.getHistoricalExportUrl({ station_id: stationId, format: 'xlsx' })
+  const exportUrlCsv = api.getHistoricalExportUrl({ station_id: stationId, format: 'csv' })
 
   return (
     <div className="space-y-4">
-      {[
-        { key: 'temp', label: 'Temperature (°C)', color: '#0284C7', unit: '°C' },
-        { key: 'humidity', label: 'Relative Humidity (%)', color: '#10B981', unit: '%' },
-        { key: 'pressure', label: 'Pressure (hPa)', color: '#8B5CF6', unit: 'hPa' },
-      ].map(({ key, label, color, unit }) => (
-        <div key={key} className="glass-card p-5 rounded-3xl">
-          <div className="text-xs font-bold tracking-wider text-slate-700 uppercase mb-3 font-heading">
-            {label}
+      {/* Header & Controls Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 glass-panel p-4 rounded-3xl">
+        <div>
+          <div className="text-xs font-bold tracking-wider text-slate-700 uppercase font-heading flex items-center gap-2">
+            <span>Historical Telemetry & Anomaly Sequence</span>
+            {latestObs && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200/80">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live: {latestObs.timestamp?.slice(0, 16)}
+              </span>
+            )}
           </div>
-          <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={data} margin={{ top: 4, right: 8, left: -10, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-              <XAxis dataKey="ts" tick={{ fill: '#94A3B8', fontSize: 10 }} interval={Math.floor(data.length / 6)} />
-              <YAxis tick={{ fill: '#94A3B8', fontSize: 10 }} unit={unit} />
-              <Tooltip contentStyle={{ background: '#FFFFFF', borderRadius: 12, border: '1px solid #E2E8F0', color: '#0F172A', fontSize: 11 }} />
-              <Line type="monotone" dataKey={key} stroke={color} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-              {anomalyPoints.map((p, i) => (
-                <ReferenceDot key={i} x={p.ts} y={p[key]} r={4} fill={p.label === 'SENSOR_FAULT' ? '#F43F5E' : '#8B5CF6'} stroke="none" />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
+          <div className="text-[11px] text-slate-400 font-medium mt-0.5">
+            {histData ? `${histData.total_records.toLocaleString()} total historical observations recorded (${histData.displayed_points} points plotted)` : 'Loading historical telemetry timeline...'}
+          </div>
         </div>
-      ))}
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Time Range Pills */}
+          <div className="flex items-center bg-slate-100/90 p-1 rounded-2xl border border-slate-200/80">
+            {RANGES.map(r => (
+              <button
+                key={r.id}
+                onClick={() => setRange(r.id)}
+                className={`px-2.5 py-1 text-[11px] font-bold rounded-xl transition-all ${
+                  range === r.id
+                    ? 'bg-white text-sky-700 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                {r.id}
+              </button>
+            ))}
+          </div>
+
+          {/* Export Dropdown */}
+          <div className="flex items-center gap-1">
+            <a
+              href={exportUrlXlsx}
+              target="_blank"
+              rel="noreferrer"
+              className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-[11px] font-bold text-slate-700 shadow-xs transition-colors flex items-center gap-1"
+            >
+              <span>Excel (.xlsx)</span>
+            </a>
+            <a
+              href={exportUrlCsv}
+              target="_blank"
+              rel="noreferrer"
+              className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-[11px] font-bold text-slate-700 shadow-xs transition-colors flex items-center gap-1"
+            >
+              <span>CSV</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <LoadingSkeleton rows={4} height="h-48" />
+      ) : error ? (
+        <ErrorState message={error} />
+      ) : points.length > 0 ? (
+        <HistoricalCharts points={points} anomalies={histData.anomalies || []} latestObs={latestObs} />
+      ) : (
+        <div className="glass-panel p-8 text-center rounded-3xl text-xs font-semibold text-slate-400">
+          No historical telemetry records found for the selected time window.
+        </div>
+      )}
     </div>
   )
 }
+
+function HistoricalCharts({ points, anomalies, latestObs }) {
+  const chartData = points.map(r => ({
+    ts: r.timestamp.length > 10 ? r.timestamp.slice(5, 16) : r.timestamp,
+    fullTs: r.timestamp,
+    temp: r.temperature_c,
+    humidity: r.relative_humidity_pct,
+    pressure: r.pressure_hpa,
+    wind: r.wind_speed_kmh,
+    rain: r.rainfall_mm,
+    label: r.ground_truth_label,
+    fault: r.fault_description,
+  }))
+
+  const metrics = [
+    { key: 'temp', label: 'Temperature (°C)', color: '#0284C7', unit: '°C', gradient: 'from-sky-500/10' },
+    { key: 'humidity', label: 'Relative Humidity (%)', color: '#10B981', unit: '%', gradient: 'from-emerald-500/10' },
+    { key: 'pressure', label: 'Atmospheric Pressure (hPa)', color: '#8B5CF6', unit: 'hPa', gradient: 'from-purple-500/10' },
+    { key: 'wind', label: 'Wind Speed (km/h)', color: '#F59E0B', unit: 'km/h', gradient: 'from-amber-500/10' },
+    { key: 'rain', label: 'Rainfall (mm)', color: '#06B6D4', unit: 'mm', gradient: 'from-cyan-500/10' },
+  ]
+
+  return (
+    <div className="space-y-4">
+      {metrics.map(({ key, label, color, unit }) => {
+        const hasValues = chartData.some(d => d[key] !== null && d[key] !== undefined && !isNaN(d[key]))
+        if (!hasValues) return null
+
+        return (
+          <div key={key} className="glass-card p-5 rounded-3xl">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-xs font-bold tracking-wider text-slate-800 uppercase font-heading">
+                {label}
+              </div>
+              <div className="flex items-center gap-3 text-[10px] font-semibold text-slate-400">
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} /> Telemetry
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-rose-500" /> Sensor Fault
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-purple-500" /> Weather Event
+                </span>
+              </div>
+            </div>
+
+            <ResponsiveContainer width="100%" height={190}>
+              <LineChart data={chartData} margin={{ top: 6, right: 12, left: -10, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                <XAxis dataKey="ts" tick={{ fill: '#94A3B8', fontSize: 10 }} interval={Math.max(1, Math.floor(chartData.length / 7))} />
+                <YAxis tick={{ fill: '#94A3B8', fontSize: 10 }} unit={unit} domain={['auto', 'auto']} />
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      const d = payload[0].payload
+                      return (
+                        <div className="bg-white/95 backdrop-blur-md p-3 rounded-2xl shadow-lg border border-slate-200 text-xs space-y-1">
+                          <div className="font-bold text-slate-800">{d.fullTs}</div>
+                          <div className="text-slate-600 font-semibold">
+                            {label}: <span className="font-bold text-slate-900">{d[key]} {unit}</span>
+                          </div>
+                          {d.label && d.label !== 'NORMAL' && (
+                            <div className="pt-1 text-[11px] font-bold text-rose-600">
+                              Status: {d.label} {d.fault ? `(${d.fault})` : ''}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    }
+                    return null
+                  }}
+                />
+                <Line type="monotone" dataKey={key} stroke={color} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                {chartData
+                  .filter(d => d.label && d.label !== 'NORMAL' && d[key] !== null)
+                  .map((p, i) => (
+                    <ReferenceDot
+                      key={i}
+                      x={p.ts}
+                      y={p[key]}
+                      r={4.5}
+                      fill={p.label === 'SENSOR_FAULT' ? '#F43F5E' : '#8B5CF6'}
+                      stroke="#FFFFFF"
+                      strokeWidth={1.5}
+                    />
+                  ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+

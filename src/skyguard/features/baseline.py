@@ -75,7 +75,7 @@ def apply_station_baselines(
     for station, grp_idx in df.groupby("station_id").groups.items():
         grp = df.loc[grp_idx]
         if station not in baselines:
-            logger.warning("No baseline for station %s", station)
+            logger.debug("No baseline for station %s", station)
             continue
 
         for col in cols:

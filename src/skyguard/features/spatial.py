@@ -90,62 +90,37 @@ def add_spatial_features(
         df[f"spatial_{col}_residual"] = np.nan
 
     # Fast Vectorized Computation using Pivot Table
-    has_multiple_timestamps = df["timestamp"].nunique() > 1
-    if has_multiple_timestamps and len(df) > 50:
-        indexed_df = df.set_index(["timestamp", "station_id"])
-        
-        for col in cols:
-            src = f"{col}_clean" if f"{col}_clean" in df.columns else col
-            if src not in df.columns:
-                continue
-            piv = df.pivot_table(index="timestamp", columns="station_id", values=src, aggfunc="first")
-            
-            n_mean_df = pd.DataFrame(index=piv.index)
-            n_std_df = pd.DataFrame(index=piv.index)
-            for s in stations:
-                n_ids = [n for n in nearest_k[s] if n in piv.columns]
-                if n_ids:
-                    n_mean_df[s] = piv[n_ids].mean(axis=1)
-                    n_std_df[s] = piv[n_ids].std(axis=1).fillna(0.0)
-                else:
-                    n_mean_df[s] = np.nan
-                    n_std_df[s] = np.nan
+    indexed_df = df.set_index(["timestamp", "station_id"])
+    for col in cols:
+        src = f"{col}_clean" if f"{col}_clean" in df.columns else col
+        if src not in df.columns:
+            continue
+        piv = df.pivot_table(index="timestamp", columns="station_id", values=src, aggfunc="first")
 
-            n_mean_df.columns.name = "station_id"
-            n_std_df.columns.name = "station_id"
+        n_mean_dict = {}
+        n_std_dict = {}
+        for s in stations:
+            n_ids = [n for n in nearest_k.get(s, []) if n in piv.columns]
+            if n_ids:
+                n_mean_dict[s] = piv[n_ids].mean(axis=1)
+                n_std_dict[s] = piv[n_ids].std(axis=1).fillna(0.0)
+            else:
+                n_mean_dict[s] = pd.Series(np.nan, index=piv.index)
+                n_std_dict[s] = pd.Series(np.nan, index=piv.index)
 
-            mean_s = n_mean_df.stack(future_stack=True)
-            std_s = n_std_df.stack(future_stack=True)
+        n_mean_df = pd.DataFrame(n_mean_dict, index=piv.index)
+        n_std_df = pd.DataFrame(n_std_dict, index=piv.index)
+        n_mean_df.columns.name = "station_id"
+        n_std_df.columns.name = "station_id"
 
-            indexed_df[f"neighbor_{col}_mean"] = mean_s
-            indexed_df[f"neighbor_{col}_std"] = std_s
-            indexed_df[f"spatial_{col}_residual"] = indexed_df[src] - indexed_df[f"neighbor_{col}_mean"]
+        mean_s = n_mean_df.stack(future_stack=True)
+        std_s = n_std_df.stack(future_stack=True)
 
-        df = indexed_df.reset_index()
-    else:
-        # Fallback for single timestamp / small slices
-        for ts, ts_grp in df.groupby("timestamp"):
-            for idx, row in ts_grp.iterrows():
-                station = row["station_id"]
-                neighbor_ids = [s for s in nearest_k.get(station, []) if s in ts_grp["station_id"].values]
-                if not neighbor_ids:
-                    continue
+        indexed_df[f"neighbor_{col}_mean"] = mean_s
+        indexed_df[f"neighbor_{col}_std"] = std_s
+        indexed_df[f"spatial_{col}_residual"] = indexed_df[src] - indexed_df[f"neighbor_{col}_mean"]
 
-                neighbor_rows = ts_grp[ts_grp["station_id"].isin(neighbor_ids)]
-                for col in cols:
-                    src = f"{col}_clean" if f"{col}_clean" in df.columns else col
-                    if src not in df.columns:
-                        continue
-                    n_vals = neighbor_rows[src].dropna()
-                    if len(n_vals) == 0:
-                        continue
-                    n_mean = float(n_vals.mean())
-                    n_std = float(n_vals.std()) if len(n_vals) > 1 else 0.0
-                    obs_val = row[src] if not pd.isna(row.get(src, np.nan)) else np.nan
-                    df.loc[idx, f"neighbor_{col}_mean"] = n_mean
-                    df.loc[idx, f"neighbor_{col}_std"] = n_std
-                    if not np.isnan(obs_val):
-                        df.loc[idx, f"spatial_{col}_residual"] = obs_val - n_mean
+    df = indexed_df.reset_index()
 
     res_cols = [f"spatial_{c}_residual" for c in cols if f"spatial_{c}_residual" in df.columns]
     if res_cols:

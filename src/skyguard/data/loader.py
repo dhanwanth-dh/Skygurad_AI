@@ -33,6 +33,7 @@ def load_raw(path: Path | str) -> pd.DataFrame:
     if df["timestamp"].isna().any():
         logger.warning("Some timestamps could not be parsed — check raw file.")
 
+    df = df.drop_duplicates(subset=["station_id", "timestamp"], keep="last")
     df = df.sort_values(["station_id", "timestamp"]).reset_index(drop=True)
     logger.info("Loaded %d rows × %d columns from %s", len(df), df.shape[1], path.name)
     return df

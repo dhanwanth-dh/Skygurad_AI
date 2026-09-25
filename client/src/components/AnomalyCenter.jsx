@@ -32,7 +32,7 @@ export function AnomalyCenter({ anomalies = [], loading = false }) {
           All Stations Operational & Verified
         </div>
         <p className="text-xs text-slate-500 max-w-md font-medium">
-          Zero active telemetry anomalies flagged. All 30 Pan-India AWS stations are operating within standard historical bounds.
+          Zero active telemetry anomalies flagged. All monitored Pan-India AWS stations are operating within standard historical bounds.
         </p>
       </div>
     )

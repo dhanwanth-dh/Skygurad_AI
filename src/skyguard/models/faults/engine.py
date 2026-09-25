@@ -35,6 +35,20 @@ class FaultEvidenceEngine:
                 "fault_evidence": [],
             }
 
+        def _val(col: str, default: float = 0.0) -> float:
+            v = row.get(col, default) if isinstance(row, dict) else row.get(col, default)
+            try:
+                if v is None or pd.isna(v):
+                    return default
+                return float(v)
+            except (ValueError, TypeError):
+                return default
+
+        rain = _val("rainfall_mm", 0.0)
+        wind = _val("wind_speed_kmh", 0.0)
+        temp = _val("temperature_c", 25.0)
+        rh = _val("relative_humidity_pct", 50.0)
+
         # 1. Check rule-based signatures
         is_spike = bool(row.get("rule_spike", False))
         is_freeze = bool(row.get("rule_freeze", False))
@@ -49,6 +63,14 @@ class FaultEvidenceEngine:
         temp_z = row.get("temperature_c_robust_z", np.nan)
         rh_z = row.get("relative_humidity_pct_robust_z", np.nan)
         press_z = row.get("pressure_hpa_robust_z", np.nan)
+        qc_score = float(row.get("statistical_anomaly_score", 0.0) or 0.0)
+
+        has_severe_weather = (
+            (rain >= 10.0 and rh >= 70.0)
+            or (wind >= 35.0)
+            or (temp >= 40.0 and rh <= 55.0)
+            or (temp <= 8.0 and temp >= -20.0)
+        )
 
         # Priority 1: Spike (isolated jump + recovery)
         if is_spike:
@@ -64,7 +86,7 @@ class FaultEvidenceEngine:
             confidence = 0.92
             evidence.append("Near-zero variance across consecutive sensor observations (stuck value)")
             if not pd.isna(rh_z):
-                evidence.append(f"Relative humidity remained static while atmospheric baseline shifted")
+                evidence.append("Relative humidity remained static while atmospheric baseline shifted")
 
         # Priority 3: Drift (persistent directional deviation)
         elif is_drift:
@@ -81,19 +103,13 @@ class FaultEvidenceEngine:
             time_gap = row.get("time_since_prev_obs", np.nan)
             evidence.append(f"Telemetry temporal gap ({time_gap:.1f} hours) indicates transmission dropout")
 
-        # Priority 5: Supervised classifier if available
-        elif self.classifier is not None and self.classifier._model is not None:
-            s_type = self.classifier.predict_fault_type(pd.Series(row))
-            if s_type and s_type != "UNKNOWN":
-                fault_type = s_type
-                confidence = 0.80
-                evidence.append(f"Supervised fault classifier pattern matches {s_type}")
-                if fault_type == "DRIFT" and not pd.isna(temp_res):
-                    evidence.append(f"Temperature residual: {temp_res:+.2f} °C")
-                elif fault_type == "FREEZE" and not pd.isna(rh_res):
-                    evidence.append(f"Humidity residual: {rh_res:+.2f}%")
+        # Priority 5: Quality Control violation (severe physical range / physical consistency failure)
+        elif qc_score >= 0.50 and not has_severe_weather:
+            fault_type = "DRIFT"
+            confidence = 0.80
+            evidence.append(f"Severe statistical quality control violation (score: {qc_score:.2f})")
 
-        # Fallback
+        # Priority 6: Severe Weather or Normal telemetry without hardware fault flags
         else:
             inferred = infer_fault_type(row)
             if inferred != "UNKNOWN":
@@ -101,15 +117,16 @@ class FaultEvidenceEngine:
                 confidence = 0.70
                 evidence.append(f"Sensor heuristic rule matches {inferred}")
             else:
-                fault_type = "UNKNOWN"
-                confidence = 0.50
-                evidence.append("Sensor telemetry anomalous but does not match single signature")
+                fault_type = "NONE"
+                confidence = 0.0
+                evidence.append("No hardware fault signatures detected on active sensors")
 
-        # Add residual / baseline context if available
-        if not pd.isna(temp_z) and abs(temp_z) > 2.5 and "temperature deviation" not in " ".join(evidence).lower():
-            evidence.append(f"Temperature baseline deviation: {temp_z:+.2f} MAD")
-        if not pd.isna(rh_z) and abs(rh_z) > 2.5 and "humidity" not in " ".join(evidence).lower():
-            evidence.append(f"Relative humidity baseline deviation: {rh_z:+.2f} MAD")
+        # Add residual / baseline context if available and a fault was found
+        if fault_type != "NONE":
+            if not pd.isna(temp_z) and abs(temp_z) > 2.5 and "temperature deviation" not in " ".join(evidence).lower():
+                evidence.append(f"Temperature baseline deviation: {temp_z:+.2f} MAD")
+            if not pd.isna(rh_z) and abs(rh_z) > 2.5 and "humidity" not in " ".join(evidence).lower():
+                evidence.append(f"Relative humidity baseline deviation: {rh_z:+.2f} MAD")
 
         return {
             "fault_type": fault_type,

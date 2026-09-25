@@ -1,35 +1,39 @@
 import { useState } from 'react'
 import { RefreshCw, Menu, Radio } from 'lucide-react'
-import { useHealth } from '../hooks/useApi'
+import { useHealth, useStations } from '../hooks/useApi'
 
 export function Header({ onMenuClick }) {
-  const { data: health, loading, refetch } = useHealth()
+  const { data: health, loading, refetch: refetchHealth } = useHealth()
+  const { data: stationsData, refetch: refetchStations } = useStations()
   const [isRotating, setIsRotating] = useState(false)
 
   const isOk = health?.status === 'ok' && health?.model_loaded
+  const stationCount = stationsData?.stations?.length ?? stationsData?.total ?? 0
 
   const handleRefresh = async () => {
     setIsRotating(true)
-    await refetch()
+    await Promise.allSettled([refetchHealth(), refetchStations()])
     setTimeout(() => setIsRotating(false), 600)
   }
 
   return (
-    <header className="h-16 px-6 lg:px-8 flex items-center justify-between border-b border-white/40 bg-white/45 backdrop-blur-2xl z-20 shrink-0 shadow-xs">
+    <header className="h-16 px-6 lg:px-8 flex items-center justify-between border-b border-slate-700/50 bg-slate-950/80 backdrop-blur-2xl z-20 shrink-0 shadow-lg">
       <div className="flex items-center gap-4">
         <button
-          className="lg:hidden p-2 rounded-2xl bg-white/50 hover:bg-white/70 text-slate-600 hover:text-slate-900 transition-colors shadow-xs"
+          className="lg:hidden p-2 rounded-2xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 hover:text-white transition-colors shadow-xs"
           onClick={onMenuClick}
           aria-label="Open menu"
         >
           <Menu size={20} />
         </button>
 
-        <div className="header-network hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/50 backdrop-blur-md border border-white/60 text-xs text-slate-700 shadow-xs">
-          <Radio className="w-3.5 h-3.5 text-sky-500 animate-pulse" />
-          <span className="font-bold text-slate-800">Pan-India AWS Network</span>
+        <div className="header-network hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-800/90 backdrop-blur-md border border-slate-700/80 text-xs shadow-xs">
+          <Radio className="w-3.5 h-3.5 text-sky-400 animate-pulse" />
+          <span className="font-bold text-slate-100">Pan-India AWS Network</span>
           <span className="text-slate-400">·</span>
-          <span className="text-slate-600 font-mono font-semibold">30 Active Stations</span>
+          <span className="text-sky-300 font-mono font-bold">
+            {stationCount > 0 ? `${stationCount} Active Stations` : 'Live Telemetry'}
+          </span>
         </div>
       </div>
 
@@ -38,21 +42,21 @@ export function Header({ onMenuClick }) {
           <div
             className={'flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold tracking-wide border backdrop-blur-md shadow-xs transition-all ' +
               (isOk
-                ? 'bg-emerald-50/80 border-emerald-300/80 text-emerald-800 shadow-emerald-500/10'
-                : 'bg-rose-50/80 border-rose-300/80 text-rose-800 shadow-rose-500/10')}
+                ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300 shadow-emerald-500/10'
+                : 'bg-rose-950/80 border-rose-500/50 text-rose-300 shadow-rose-500/10')}
           >
-            <span className={'w-2 h-2 rounded-full ' + (isOk ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500')} />
+            <span className={'w-2 h-2 rounded-full ' + (isOk ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400')} />
             <span>{isOk ? 'AI Engine Operational' : 'Offline / Standby'}</span>
           </div>
         )}
 
         <button
           onClick={handleRefresh}
-          className="header-sync flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/70 hover:bg-white/90 backdrop-blur-md border border-white/80 text-xs font-bold text-slate-800 shadow-xs hover:shadow transition-all duration-200 active:scale-95"
+          className="header-sync flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-800/90 hover:bg-slate-700/90 backdrop-blur-md border border-slate-600/80 text-xs font-bold text-white shadow-xs hover:shadow transition-all duration-200 active:scale-95 cursor-pointer"
           aria-label="Refresh telemetry and models"
         >
-          <RefreshCw size={13} className={isRotating ? 'text-sky-600 animate-spin' : 'text-sky-600'} />
-          <span className="hidden sm:inline">Sync</span>
+          <RefreshCw size={13} className={isRotating ? 'text-sky-400 animate-spin' : 'text-sky-400'} />
+          <span className="hidden sm:inline text-white">Sync</span>
         </button>
       </div>
     </header>

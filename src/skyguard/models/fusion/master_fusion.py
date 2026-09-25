@@ -76,7 +76,6 @@ class MasterEvidenceFusion:
         genuine_event_evidence = event_results.get("genuine_event_evidence", [])
 
         # 5. Calculate Master Fused Anomaly Score
-        # Weighted combination of ML anomaly consensus (45%), Statistical QC (30%), and Expected Residuals (25%)
         final_anomaly_score = float(np.clip(
             0.45 * combined_anomaly_score +
             0.30 * qc_score +
@@ -85,17 +84,15 @@ class MasterEvidenceFusion:
         ))
 
         # 6. Calculate Uncertainty Score
-        # Uncertainty is driven by:
-        # - Model disagreement (regression spread)
-        # - Discrepancy between anomaly detectors (e.g. 3/6 models)
-        # - Reduced model coverage (if models crashed or missing)
-        # - Conflicting fault vs weather event evidence
-        anomaly_detector_conflict = 1.0 - abs(anomaly_ratio - 0.5) * 2.0  # highest when ratio ~ 0.5 (split decision)
+        anomaly_detector_conflict = 1.0 - abs(anomaly_ratio - 0.5) * 2.0
         evidence_conflict = 0.5 if (fault_confidence > 0.5 and genuine_event_score > 0.5) else 0.0
         coverage_penalty = max(0.0, 1.0 - model_coverage_ratio)
 
+        # In genuine weather events, regression disagreement is physical (cooling/rain), not epistemic uncertainty
+        effective_reg_disagreement = regression_disagreement * (0.3 if genuine_event_score >= 0.40 else 1.0)
+
         raw_uncertainty = (
-            0.35 * regression_disagreement +
+            0.35 * effective_reg_disagreement +
             0.25 * anomaly_detector_conflict +
             0.25 * coverage_penalty +
             0.15 * evidence_conflict
@@ -112,8 +109,31 @@ class MasterEvidenceFusion:
         prediction = "NORMAL"
         class_probs = {"NORMAL": 0.90, "GENUINE_EXTREME": 0.05, "SENSOR_FAULT": 0.05}
 
-        # Case A: Low anomaly evidence -> NORMAL
-        if final_anomaly_score < self.sensor_fault_threshold and qc_score < 0.35 and fault_type == "NONE":
+        is_hard_fault = fault_type in ("FREEZE", "SPIKE", "COMMUNICATION_FAILURE")
+
+        # Case A: Genuine Meteorological Extreme
+        if genuine_event_score >= self.genuine_extreme_threshold and not is_hard_fault and (genuine_event_score >= fault_confidence or fault_type == "NONE"):
+            prediction = "GENUINE_EXTREME"
+            confidence = float(np.clip(0.65 + genuine_event_score * 0.30 - uncertainty_score * 0.15, 0.60, 0.98))
+            class_probs = {
+                "GENUINE_EXTREME": round(confidence, 4),
+                "SENSOR_FAULT": round((1.0 - confidence) * 0.4, 4),
+                "NORMAL": round((1.0 - confidence) * 0.6, 4),
+            }
+
+        # Case B: Hardware Sensor Fault
+        elif (fault_type != "NONE" and fault_type != "UNKNOWN" and fault_confidence >= 0.40) or (is_hard_fault) or (qc_score >= 0.50 and genuine_event_score < 0.30):
+            prediction = "SENSOR_FAULT"
+            base_conf = max(fault_confidence, final_anomaly_score)
+            confidence = float(np.clip(base_conf * 0.90 + 0.05 - uncertainty_score * 0.15, 0.55, 0.98))
+            class_probs = {
+                "SENSOR_FAULT": round(confidence, 4),
+                "GENUINE_EXTREME": round((1.0 - confidence) * 0.3, 4),
+                "NORMAL": round((1.0 - confidence) * 0.7, 4),
+            }
+
+        # Case C: Low Anomaly Evidence -> Normal
+        elif final_anomaly_score < self.sensor_fault_threshold and qc_score < 0.35 and fault_type == "NONE":
             prediction = "NORMAL"
             confidence = float(np.clip(1.0 - final_anomaly_score * 1.2, 0.60, 0.99))
             class_probs = {
@@ -122,42 +142,25 @@ class MasterEvidenceFusion:
                 "SENSOR_FAULT": round((1.0 - confidence) * 0.6, 4),
             }
 
-        # Case B: High anomaly evidence -> Distinguish Fault vs Genuine Extreme
+        # Case D: Ambiguous / Indeterminate
         else:
-            # Genuine Meteorological Event requires: high genuine_event_score, no disqualifying freeze/spike rule
-            if genuine_event_score >= self.genuine_extreme_threshold and genuine_event_score > fault_confidence and fault_type not in ("FREEZE", "SPIKE"):
+            if genuine_event_score >= 0.30:
                 prediction = "GENUINE_EXTREME"
-                confidence = float(np.clip(0.60 + genuine_event_score * 0.35 - uncertainty_score * 0.2, 0.50, 0.95))
-                class_probs = {
-                    "GENUINE_EXTREME": round(confidence, 4),
-                    "SENSOR_FAULT": round((1.0 - confidence) * 0.6, 4),
-                    "NORMAL": round((1.0 - confidence) * 0.4, 4),
-                }
-
-            # Sensor Fault
-            elif fault_type != "NONE" or fault_confidence >= 0.40 or qc_score >= 0.35 or final_anomaly_score >= 0.50:
-                prediction = "SENSOR_FAULT"
-                base_conf = max(fault_confidence, final_anomaly_score)
-                confidence = float(np.clip(base_conf * 0.90 + 0.05 - uncertainty_score * 0.15, 0.55, 0.98))
-                class_probs = {
-                    "SENSOR_FAULT": round(confidence, 4),
-                    "GENUINE_EXTREME": round((1.0 - confidence) * 0.7, 4),
-                    "NORMAL": round((1.0 - confidence) * 0.3, 4),
-                }
-
-            # Conflicting / Indeterminate
+                confidence = 0.65
+                class_probs = {"GENUINE_EXTREME": 0.65, "SENSOR_FAULT": 0.20, "NORMAL": 0.15}
+            elif uncertainty_score > 0.60:
+                prediction = "UNKNOWN"
+                confidence = 0.40
+                class_probs = {"NORMAL": 0.40, "SENSOR_FAULT": 0.35, "GENUINE_EXTREME": 0.25}
             else:
-                if uncertainty_score > 0.60:
-                    prediction = "UNKNOWN"
-                    confidence = 0.40
-                else:
-                    prediction = "NORMAL"
-                    confidence = 0.65
+                prediction = "NORMAL"
+                confidence = 0.65
+                class_probs = {"NORMAL": 0.65, "GENUINE_EXTREME": 0.20, "SENSOR_FAULT": 0.15}
 
         # Confidence Level categorization
-        if confidence >= 0.80 and uncertainty_score <= 0.25:
+        if confidence >= 0.80 and uncertainty_score <= 0.35:
             confidence_level = "HIGH"
-        elif confidence >= 0.60 and uncertainty_score <= 0.50:
+        elif confidence >= 0.55 and uncertainty_score <= 0.55:
             confidence_level = "MEDIUM"
         else:
             confidence_level = "LOW"
@@ -173,11 +176,10 @@ class MasterEvidenceFusion:
         # 9. Top Reasons & Explanation Synthesis
         top_reasons: list[str] = []
 
-        if prediction == "NORMAL":
-            top_reasons.append("All sensor observations within normal historical climatology baselines")
-            if models_agreeing == 0:
-                top_reasons.append("Unsupervised anomaly detectors find no outlier evidence (0/6 consensus)")
-            top_reasons.append("High cross-sensor regression and neighbor spatial agreement")
+        if prediction == "GENUINE_EXTREME":
+            top_reasons.extend(genuine_event_evidence[:3])
+            if models_agreeing > 0:
+                top_reasons.append(f"{models_agreeing}/{total_anomaly_models} anomaly detectors confirm significant atmospheric deviation")
 
         elif prediction == "SENSOR_FAULT":
             top_reasons.extend(fault_evidence[:3])
@@ -186,18 +188,19 @@ class MasterEvidenceFusion:
             if qc_evidence:
                 top_reasons.append(qc_evidence[0])
 
-        elif prediction == "GENUINE_EXTREME":
-            top_reasons.extend(genuine_event_evidence[:3])
-            if models_agreeing > 0:
-                top_reasons.append(f"{models_agreeing}/{total_anomaly_models} anomaly detectors confirm significant atmospheric deviation")
+        elif prediction == "NORMAL":
+            top_reasons.append("All sensor observations within normal historical climatology baselines")
+            if models_agreeing == 0:
+                top_reasons.append("Unsupervised anomaly detectors find no outlier evidence (0/6 consensus)")
+            top_reasons.append("High cross-sensor regression and neighbor spatial agreement")
 
         elif prediction == "UNKNOWN":
             top_reasons.append("Conflicting evidence detected across anomaly and spatial engines")
             top_reasons.append(f"Model disagreement uncertainty is high ({uncertainty_score:.2f})")
 
         # 10. Recommended Action
-        if prediction == "NORMAL":
-            recommended_action = "Routine monitoring. Data quality verified."
+        if prediction == "GENUINE_EXTREME":
+            recommended_action = "Issue meteorological alert. Confirm radar and satellite ground truth."
         elif prediction == "SENSOR_FAULT":
             if fault_type == "DRIFT":
                 recommended_action = "Schedule calibration audit. Recalibrate sensor offset baseline."
@@ -209,8 +212,8 @@ class MasterEvidenceFusion:
                 recommended_action = "Check telemetry modem, solar power budget, and cellular link."
             else:
                 recommended_action = "Inspect station telemetry and dispatch field maintenance if error persists."
-        elif prediction == "GENUINE_EXTREME":
-            recommended_action = "Issue meteorological alert. Confirm radar and satellite ground truth."
+        elif prediction == "NORMAL":
+            recommended_action = "Routine monitoring. Data quality verified."
         else:
             recommended_action = "Collect additional consecutive observations to resolve ambiguity."
 

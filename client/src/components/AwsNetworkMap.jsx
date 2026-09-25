@@ -14,10 +14,23 @@ L.Icon.Default.mergeOptions({
 })
 
 const STATUS_CONFIG = {
-  NORMAL:          { color: '#10B981', label: 'Normal',                symbol: 'â—' },
-  SENSOR_FAULT:    { color: '#F43F5E', label: 'Sensor Fault',          symbol: 'âš ' },
-  GENUINE_EXTREME: { color: '#8B5CF6', label: 'Genuine Weather Event', symbol: 'â—†' },
+  NORMAL:          { color: '#10B981', label: 'Normal',                symbol: '●' },
+  SENSOR_FAULT:    { color: '#F43F5E', label: 'Sensor Fault',          symbol: '⚠' },
+  GENUINE_EXTREME: { color: '#8B5CF6', label: 'Genuine Weather Event', symbol: '◆' },
   UNKNOWN:         { color: '#94A3B8', label: 'Unknown',               symbol: '?' },
+}
+
+function sanitizeCoordinate(station) {
+  let lat = Number(station.latitude)
+  let lng = Number(station.longitude)
+
+  if (station.station_id === '55D20BC6' || (lat === 0 && lng === 0) || isNaN(lat) || isNaN(lng) || lat < 6 || lat > 38 || lng < 65 || lng > 98.5) {
+    if (station.station_id === '55D20BC6' || (station.station_name && station.station_name.toUpperCase().includes('ASSAM'))) {
+      return { ...station, latitude: 26.1175, longitude: 92.0835 }
+    }
+    return { ...station, latitude: 20.5937, longitude: 78.9629 }
+  }
+  return station
 }
 
 function makeIcon(prediction, isSelected) {
@@ -47,8 +60,10 @@ function FitBounds({ stations }) {
   const map = useMap()
   useEffect(() => {
     if (!stations || stations.length === 0) return
-    const bounds = L.latLngBounds(stations.map(s => [s.latitude, s.longitude]))
-    map.fitBounds(bounds, { padding: [50, 50] })
+    const valid = stations.filter(s => s.latitude && s.longitude)
+    if (valid.length === 0) return
+    const bounds = L.latLngBounds(valid.map(s => [s.latitude, s.longitude]))
+    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 8 })
   }, [map, stations])
   return null
 }
@@ -60,14 +75,16 @@ export function AwsNetworkMap({ stations = [], loading = false }) {
   const [filter, setFilter] = useState('ALL')
   const [selected, setSelected] = useState(null)
 
-  const filtered = stations.filter(s => {
+  const sanitizedStations = stations.map(sanitizeCoordinate)
+
+  const filtered = sanitizedStations.filter(s => {
     if (filter === 'ALL') return true
     if (filter === 'NORMAL') return s.prediction === 'NORMAL'
     if (filter === 'ANOMALOUS') return s.prediction !== 'NORMAL'
     return s.prediction === filter
   })
 
-  const anomalyCount = stations.filter(s => s.prediction !== 'NORMAL').length
+  const anomalyCount = sanitizedStations.filter(s => s.prediction !== 'NORMAL').length
 
   return (
     <div className="glass-card rounded-3xl overflow-hidden shadow-md">
@@ -79,7 +96,7 @@ export function AwsNetworkMap({ stations = [], loading = false }) {
             Pan-India AWS Telemetry Map
           </div>
           <div className="text-xs text-slate-500 mt-0.5">
-            {stations.length} stations active Â· {anomalyCount} flagged anomal{anomalyCount !== 1 ? 'ies' : 'y'}
+            {stations.length} stations active · {anomalyCount} flagged anomal{anomalyCount !== 1 ? 'ies' : 'y'}
           </div>
         </div>
 
@@ -146,11 +163,11 @@ function StationPopup({ station, onView }) {
         <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: cfg.color + '18', color: cfg.color }}>
           {station.prediction?.replace('_', ' ')}
         </span>
-        <span className="text-[11px] font-semibold text-slate-400">Â· {station.severity}</span>
+        <span className="text-[11px] font-semibold text-slate-400">· {station.severity}</span>
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-xs py-1 border-t border-b border-slate-100">
-        <div><span className="text-slate-400 text-[10px] block uppercase">Temp</span><span className="font-bold text-slate-800">{fmt(station.temperature_c)} Â°C</span></div>
+        <div><span className="text-slate-400 text-[10px] block uppercase">Temp</span><span className="font-bold text-slate-800">{fmt(station.temperature_c)} °C</span></div>
         <div><span className="text-slate-400 text-[10px] block uppercase">Humidity</span><span className="font-bold text-slate-800">{fmt(station.relative_humidity_pct)} %</span></div>
         <div><span className="text-slate-400 text-[10px] block uppercase">Pressure</span><span className="font-bold text-slate-800">{fmt(station.pressure_hpa)} hPa</span></div>
         <div><span className="text-slate-400 text-[10px] block uppercase">Health</span><span className="font-bold text-emerald-600">{station.sensor_health?.toFixed(0)}/100</span></div>

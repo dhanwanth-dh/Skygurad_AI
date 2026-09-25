@@ -2,28 +2,34 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
 import sys
 from pathlib import Path
+from contextlib import asynccontextmanager
+from typing import Any, Optional
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from contextlib import asynccontextmanager
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from skyguard.config.settings import settings
-from skyguard.data.loader import load_raw
 from skyguard.inference.predictor import SkyGuardPredictor
+from skyguard.services.historical_exporter import HistoricalExporter
+from skyguard.services.historical_store import HistoricalStore
+from skyguard.services.live_data_manager import LiveDataManager
+from skyguard.training.training_manager import ContinuousTrainingManager
 from api.schemas import (
+    AdaptiveHistoryResponse,
     AnomalyConsensus,
     AnomalyListResponse,
     AnomalyRecord,
     HealthResponse,
+    HistoricalStatusResponse,
     HistoryRecord,
     HistoryResponse,
     ModelInfoResponse,
@@ -32,22 +38,74 @@ from api.schemas import (
     PredictionResponse,
     StationListResponse,
     StationRecord,
+    TrainingHistoryResponse,
+    TrainingStartRequest,
+    TrainingStartResponse,
+    TrainingStatusResponse,
     WeatherObservation,
 )
+from fastapi.responses import StreamingResponse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("skyguard.api")
 
 # ── Global state ───────────────────────────────────────────────────────────────
 _predictor: SkyGuardPredictor | None = None
-_dataset: pd.DataFrame | None = None  # raw CSV, loaded once at startup
-_station_cache: list[StationRecord] | None = None
-_anomaly_cache: list[AnomalyRecord] | None = None
+_data_manager: LiveDataManager | None = None
+_training_manager: ContinuousTrainingManager | None = None
+_historical_store: HistoricalStore | None = None
+_historical_exporter: HistoricalExporter | None = None
+_poll_task: asyncio.Task | None = None
+
+
+def _get_historical_store() -> HistoricalStore:
+    """Lazy loader for persistent HistoricalStore."""
+    global _historical_store
+    if _historical_store is None:
+        _historical_store = HistoricalStore()
+    return _historical_store
+
+
+def _get_historical_exporter() -> HistoricalExporter:
+    """Lazy loader for HistoricalExporter."""
+    global _historical_exporter
+    if _historical_exporter is None:
+        _historical_exporter = HistoricalExporter(store=_get_historical_store())
+    return _historical_exporter
+
+
+def _get_training_manager() -> ContinuousTrainingManager:
+    """Lazy loader for ContinuousTrainingManager."""
+    global _training_manager
+    if _training_manager is None:
+        _training_manager = ContinuousTrainingManager(store=_get_historical_store())
+    return _training_manager
+
+
+def _get_predictor() -> SkyGuardPredictor:
+    """Lazy loader for the predictor instance."""
+    global _predictor
+    if _predictor is None:
+        _predictor = SkyGuardPredictor(settings.artifacts_dir)
+        _predictor.load()
+    return _predictor
+
+
+def _get_data_manager() -> LiveDataManager:
+    """Lazy loader for the LiveDataManager instance."""
+    global _data_manager
+    if _data_manager is None:
+        pred = _get_predictor()
+        store = _get_historical_store()
+        exporter = _get_historical_exporter()
+        _data_manager = LiveDataManager(predictor=pred, store=store, exporter=exporter)
+        _data_manager.initialize()
+    return _data_manager
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _predictor, _dataset
+    global _predictor, _data_manager, _poll_task
     try:
         _predictor = _get_predictor()
         logger.info("SkyGuard Multi-Model predictor loaded successfully.")
@@ -55,9 +113,26 @@ async def lifespan(app: FastAPI):
         logger.error("Failed to load predictor: %s", exc)
         _predictor = None
 
-    _dataset = _get_dataset()
-    _refresh_station_cache()
+    try:
+        _data_manager = _get_data_manager()
+        logger.info("SkyGuard LiveDataManager initialized successfully.")
+    except Exception as exc:
+        logger.error("Failed to initialize LiveDataManager: %s", exc)
+        _data_manager = None
+
+    # Start background polling loop if in live IMD mode
+    if _data_manager and settings.data_source == "imd":
+        _poll_task = asyncio.create_task(_data_manager.start_polling())
+
     yield
+
+    # Teardown background polling
+    if _poll_task:
+        _poll_task.cancel()
+        try:
+            await _poll_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(
@@ -80,167 +155,11 @@ app.add_middleware(
 )
 
 
-
-def _load_dataset() -> pd.DataFrame | None:
-    """Load the raw CSV dataset once at startup."""
-    try:
-        path = settings.raw_data_path
-        df = load_raw(path)
-        logger.info("Dataset loaded: %d rows, %d stations", len(df), df["station_id"].nunique())
-        return df
-    except Exception as exc:
-        logger.error("Failed to load dataset: %s", exc)
-        return None
-
-
-def _get_predictor() -> SkyGuardPredictor:
-    """Lazy loader for the predictor instance."""
-    global _predictor
-    if _predictor is None:
-        _predictor = SkyGuardPredictor(settings.artifacts_dir)
-        _predictor.load()
-    return _predictor
-
-
-def _get_dataset() -> pd.DataFrame | None:
-    """Lazy loader for dataset."""
-    global _dataset
-    if _dataset is None:
-        _dataset = _load_dataset()
-    return _dataset
-
-
-def _refresh_station_cache() -> None:
-    """Pre-compute inference on latest rows per station for fast responses."""
-    global _station_cache, _anomaly_cache
-    ds = _get_dataset()
-    if ds is None:
-        return
-
-    latest_rows = (
-        ds.sort_values("timestamp")
-        .groupby("station_id", sort=False)
-        .tail(1)
-    )
-
-    records: list[StationRecord] = []
-    anomalies: list[AnomalyRecord] = []
-
-    for _, row in latest_rows.iterrows():
-        obs = _row_to_obs(row)
-        try:
-            inf = _run_inference(obs)
-        except Exception as exc:
-            logger.warning("Inference failed for %s: %s", row["station_id"], exc)
-            inf = {
-                "prediction": "UNKNOWN", "confidence": 0.0, "confidence_level": "LOW",
-                "uncertainty_score": 0.5, "anomaly_score": 0.0, "anomaly_consensus": None,
-                "model_agreement": 1.0, "model_coverage": "0/6 active",
-                "fault_type": "NONE", "fault_confidence": 0.0, "fault_evidence": [],
-                "genuine_event_score": 0.0, "genuine_event_evidence": [],
-                "severity": "LOW", "sensor_health": 100.0, "sensor_health_status": "UNKNOWN",
-                "expected_values": {}, "observed_values": {},
-                "top_reasons": [], "recommended_action": None, "correction": {},
-            }
-
-        rec = StationRecord(
-            station_id=str(row["station_id"]),
-            station_name=str(row.get("station_name", "")) or None,
-            latitude=float(row["latitude"]),
-            longitude=float(row["longitude"]),
-            latest_timestamp=str(row["timestamp"]),
-            temperature_c=float(row["temperature_c"]),
-            relative_humidity_pct=float(row["relative_humidity_pct"]),
-            pressure_hpa=float(row["pressure_hpa"]),
-            wind_speed_kmh=float(row.get("wind_speed_kmh", 0.0)) if pd.notna(row.get("wind_speed_kmh")) else 0.0,
-            rainfall_mm=float(row.get("rainfall_mm", 0.0)) if pd.notna(row.get("rainfall_mm")) else 0.0,
-            prediction=inf["prediction"],
-            confidence=inf["confidence"],
-            confidence_level=inf.get("confidence_level", "MEDIUM"),
-            uncertainty_score=inf.get("uncertainty_score", 0.0),
-            anomaly_score=inf["anomaly_score"],
-            anomaly_consensus=AnomalyConsensus(**inf["anomaly_consensus"]) if inf.get("anomaly_consensus") else None,
-            model_agreement=inf.get("model_agreement", 1.0),
-            model_coverage=inf.get("model_coverage", "6/6 active"),
-            fault_type=inf["fault_type"],
-            fault_confidence=inf.get("fault_confidence", 0.0),
-            fault_evidence=inf.get("fault_evidence", []),
-            genuine_event_score=inf.get("genuine_event_score", 0.0),
-            genuine_event_evidence=inf.get("genuine_event_evidence", []),
-            severity=inf["severity"],
-            sensor_health=inf["sensor_health"],
-            sensor_health_status=inf["sensor_health_status"],
-            expected_values=inf["expected_values"],
-            observed_values=inf["observed_values"],
-            top_reasons=inf["top_reasons"],
-            recommended_action=inf.get("recommended_action"),
-            correction=inf["correction"],
-        )
-        records.append(rec)
-
-        if inf["prediction"] != "NORMAL":
-            anomalies.append(AnomalyRecord(
-                station_id=rec.station_id,
-                station_name=rec.station_name,
-                latitude=rec.latitude,
-                longitude=rec.longitude,
-                timestamp=rec.latest_timestamp,
-                prediction=rec.prediction,
-                confidence=rec.confidence,
-                confidence_level=rec.confidence_level,
-                uncertainty_score=rec.uncertainty_score,
-                anomaly_score=rec.anomaly_score,
-                anomaly_consensus=rec.anomaly_consensus,
-                model_agreement=rec.model_agreement,
-                fault_type=rec.fault_type,
-                fault_confidence=rec.fault_confidence,
-                fault_evidence=rec.fault_evidence,
-                genuine_event_score=rec.genuine_event_score,
-                genuine_event_evidence=rec.genuine_event_evidence,
-                severity=rec.severity,
-                sensor_health=rec.sensor_health,
-                sensor_health_status=rec.sensor_health_status,
-                expected_values=rec.expected_values,
-                observed_values=rec.observed_values,
-                top_reasons=rec.top_reasons,
-                recommended_action=rec.recommended_action,
-                correction=rec.correction,
-            ))
-
-    _station_cache = records
-    _anomaly_cache = anomalies
-    logger.info("Station cache refreshed (%d stations, %d anomalies).", len(records), len(anomalies))
-
-# ── Helpers ────────────────────────────────────────────────────────────────────
-
-def _row_to_obs(row: pd.Series) -> dict:
-    """Convert a dataset row to a WeatherObservation-compatible dict."""
-    wind = float(row.get("wind_speed_kmh", 0.0)) if pd.notna(row.get("wind_speed_kmh")) else 0.0
-    rain = float(row.get("rainfall_mm", 0.0)) if pd.notna(row.get("rainfall_mm")) else 0.0
-    return {
-        "timestamp": str(row["timestamp"]),
-        "station_id": str(row["station_id"]),
-        "station_name": str(row.get("station_name", "")) or None,
-        "latitude": float(row["latitude"]),
-        "longitude": float(row["longitude"]),
-        "temperature_c": float(row["temperature_c"]),
-        "relative_humidity_pct": float(row["relative_humidity_pct"]),
-        "pressure_hpa": float(row["pressure_hpa"]),
-        "wind_speed_kmh": wind,
-        "rainfall_mm": rain,
-    }
-
-
-def _run_inference(obs: dict) -> dict:
-    """Run predictor on a single observation dict."""
-    pred = _get_predictor()
-    return pred.predict_single(obs)
-
-
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(observation: WeatherObservation) -> PredictionResponse:
+    """Run real-time multi-model inference pipeline on a single AWS observation."""
     try:
         pred = _get_predictor()
         result = pred.predict_single(observation.model_dump())
@@ -252,6 +171,7 @@ async def predict(observation: WeatherObservation) -> PredictionResponse:
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
+    """Check API health and model readiness."""
     pred = _get_predictor()
     return HealthResponse(
         status="ok",
@@ -262,22 +182,29 @@ async def health() -> HealthResponse:
 
 @app.get("/model-info", response_model=ModelInfoResponse)
 async def model_info() -> ModelInfoResponse:
+    """Return summary metadata regarding loaded decision models and validation metrics."""
     pred = _get_predictor()
     meta_path = settings.artifacts_dir / "metadata" / "model_metadata.json"
     if not meta_path.exists():
         raise HTTPException(status_code=404, detail="Model metadata not found.")
-    with open(meta_path) as f:
+    with open(meta_path, "r", encoding="utf-8") as f:
         meta = json.load(f)
 
     reg_raw = meta.get("model_registry", [])
     registry_items = [ModelRegistryItem(**item) for item in reg_raw] if reg_raw else []
+
+    classes = (
+        [str(c) for c in pred._decision_clf.classes_]
+        if (pred and hasattr(pred, "_decision_clf") and pred._decision_clf is not None)
+        else ["NORMAL", "GENUINE_EXTREME", "SENSOR_FAULT"]
+    )
 
     return ModelInfoResponse(
         model_version=meta.get("model_version", "unknown"),
         decision_model=meta.get("decision_model", "unknown"),
         val_macro_f1=float(meta.get("val_macro_f1", 0.0)),
         train_date=meta.get("train_date", "unknown"),
-        classes=[str(c) for c in pred._decision_clf.classes_] if (pred and hasattr(pred, "_decision_clf") and pred._decision_clf is not None) else ["NORMAL", "GENUINE_EXTREME", "SENSOR_FAULT"],
+        classes=classes,
         model_registry=registry_items,
     )
 
@@ -288,7 +215,7 @@ async def get_model_registry() -> ModelRegistryResponse:
     meta_path = settings.artifacts_dir / "metadata" / "model_metadata.json"
     if not meta_path.exists():
         raise HTTPException(status_code=404, detail="Model metadata not found.")
-    with open(meta_path) as f:
+    with open(meta_path, "r", encoding="utf-8") as f:
         meta = json.load(f)
 
     reg_raw = meta.get("model_registry", [])
@@ -310,29 +237,42 @@ async def get_model_registry() -> ModelRegistryResponse:
 @app.get("/stations", response_model=StationListResponse)
 async def get_stations() -> StationListResponse:
     """Return all unique AWS stations with their latest observation + inference."""
-    global _station_cache
-    if _station_cache is None:
-        _refresh_station_cache()
-    if _station_cache is None:
-        raise HTTPException(status_code=503, detail="Dataset not loaded.")
-    return StationListResponse(stations=_station_cache, total=len(_station_cache))
+    mgr = _get_data_manager()
+    raw_stations = mgr.get_stations()
+    if not raw_stations:
+        return StationListResponse(stations=[], total=0)
+
+    records = []
+    for s in raw_stations:
+        rec_data = dict(s)
+        if rec_data.get("anomaly_consensus") and isinstance(rec_data["anomaly_consensus"], dict):
+            rec_data["anomaly_consensus"] = AnomalyConsensus(**rec_data["anomaly_consensus"])
+        records.append(StationRecord(**rec_data))
+
+    return StationListResponse(stations=records, total=len(records))
 
 
 @app.get("/anomalies", response_model=AnomalyListResponse)
 async def get_anomalies() -> AnomalyListResponse:
     """Return only anomalous observations (prediction != NORMAL) from latest per station."""
-    global _anomaly_cache
-    if _anomaly_cache is None:
-        _refresh_station_cache()
-    if _anomaly_cache is None:
-        raise HTTPException(status_code=503, detail="Dataset not loaded.")
+    mgr = _get_data_manager()
+    raw_anomalies = mgr.get_anomalies()
+    if not raw_anomalies:
+        return AnomalyListResponse(anomalies=[], total=0, sensor_faults=0, genuine_events=0)
 
-    sensor_faults = sum(1 for a in _anomaly_cache if a.prediction == "SENSOR_FAULT")
-    genuine_events = sum(1 for a in _anomaly_cache if a.prediction == "GENUINE_EXTREME")
+    records = []
+    for a in raw_anomalies:
+        rec_data = dict(a)
+        if rec_data.get("anomaly_consensus") and isinstance(rec_data["anomaly_consensus"], dict):
+            rec_data["anomaly_consensus"] = AnomalyConsensus(**rec_data["anomaly_consensus"])
+        records.append(AnomalyRecord(**rec_data))
+
+    sensor_faults = sum(1 for a in records if a.prediction == "SENSOR_FAULT")
+    genuine_events = sum(1 for a in records if a.prediction == "GENUINE_EXTREME")
 
     return AnomalyListResponse(
-        anomalies=_anomaly_cache,
-        total=len(_anomaly_cache),
+        anomalies=records,
+        total=len(records),
         sensor_faults=sensor_faults,
         genuine_events=genuine_events,
     )
@@ -340,30 +280,29 @@ async def get_anomalies() -> AnomalyListResponse:
 
 @app.get("/stations/{station_id}/history", response_model=HistoryResponse)
 async def get_station_history(station_id: str) -> HistoryResponse:
-    """Return chronological observations for a specific station from the dataset."""
-    ds = _get_dataset()
-    if ds is None:
-        raise HTTPException(status_code=503, detail="Dataset not loaded.")
+    """Return chronological observations for a specific station from persistent store."""
+    mgr = _get_data_manager()
+    raw_history = mgr.get_station_history(station_id, limit=200)
+    if not raw_history:
+        # Check if station exists in station cache
+        stations = mgr.get_stations()
+        matching = [s for s in stations if s["station_id"] == station_id]
+        if not matching:
+            raise HTTPException(status_code=404, detail=f"Station '{station_id}' not found.")
+        # If station exists with single observation
+        s = matching[0]
+        raw_history = [{
+            "timestamp": s["latest_timestamp"],
+            "temperature_c": s["temperature_c"],
+            "relative_humidity_pct": s["relative_humidity_pct"],
+            "pressure_hpa": s["pressure_hpa"],
+            "wind_speed_kmh": s["wind_speed_kmh"],
+            "rainfall_mm": s["rainfall_mm"],
+            "ground_truth_label": None,
+            "fault_description": None,
+        }]
 
-    station_df = ds[ds["station_id"] == station_id].sort_values("timestamp")
-    if station_df.empty:
-        raise HTTPException(status_code=404, detail=f"Station '{station_id}' not found.")
-
-    # Return the most recent 100 observations to keep response fast
-    recent_df = station_df.tail(100)
-    records: list[HistoryRecord] = []
-    for _, row in recent_df.iterrows():
-        records.append(HistoryRecord(
-            timestamp=str(row["timestamp"]),
-            temperature_c=float(row["temperature_c"]),
-            relative_humidity_pct=float(row["relative_humidity_pct"]),
-            pressure_hpa=float(row["pressure_hpa"]),
-            wind_speed_kmh=float(row.get("wind_speed_kmh", 0.0)) if pd.notna(row.get("wind_speed_kmh")) else 0.0,
-            rainfall_mm=float(row.get("rainfall_mm", 0.0)) if pd.notna(row.get("rainfall_mm")) else 0.0,
-            ground_truth_label=str(row["ground_truth_label"]) if pd.notna(row.get("ground_truth_label")) else None,
-            fault_description=str(row["fault_description"]) if pd.notna(row.get("fault_description")) else None,
-        ))
-
+    records = [HistoryRecord(**r) for r in raw_history]
     return HistoryResponse(
         station_id=station_id,
         records=records,
@@ -371,7 +310,118 @@ async def get_station_history(station_id: str) -> HistoryResponse:
     )
 
 
+@app.get("/data-source/status")
+async def get_data_source_status() -> dict:
+    """Return live data source status, telemetry diagnostics, and historical store metrics."""
+    mgr = _get_data_manager()
+    return mgr.get_status()
+
+
+# ── Historical Data & Chart Endpoints ──────────────────────────────────────────
+
+@app.get("/historical/status", response_model=HistoricalStatusResponse)
+async def get_historical_status() -> HistoricalStatusResponse:
+    """Return historical database store statistics, coverage dates, and records count."""
+    store = _get_historical_store()
+    status_data = store.get_status()
+    status_data["target_historical_years"] = settings.historical_years
+    return HistoricalStatusResponse(**status_data)
+
+
+@app.get("/historical/stations/{station_id}", response_model=AdaptiveHistoryResponse)
+async def get_historical_station_telemetry(
+    station_id: str,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    metric: Optional[str] = None,
+    max_points: int = 200,
+) -> AdaptiveHistoryResponse:
+    """Return adaptive time-aware telemetry points and anomaly markers across 10-15 year ranges."""
+    store = _get_historical_store()
+    res = store.get_station_history_adaptive(
+        station_id=station_id,
+        start=start,
+        end=end,
+        metric=metric,
+        max_points=max_points,
+    )
+    if res["total_records"] == 0:
+        # Fallback to in-memory live station cache if DB has not yet accumulated multi-year data
+        mgr = _get_data_manager()
+        cached_history = mgr.get_station_history(station_id, limit=max_points)
+        if cached_history:
+            res["total_records"] = len(cached_history)
+            res["displayed_points"] = len(cached_history)
+            res["points"] = cached_history
+            res["latest_observation"] = cached_history[-1]
+
+    return AdaptiveHistoryResponse(**res)
+
+
+@app.get("/historical/export")
+async def export_historical_telemetry(
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    station_id: Optional[str] = None,
+    format: str = "xlsx",
+):
+    """Download filtered historical observations as partitioned Excel (.xlsx) or CSV."""
+    exporter = _get_historical_exporter()
+    buf, filename, media_type = exporter.export_data_buffer(
+        start=start,
+        end=end,
+        station_id=station_id,
+        export_format=format,
+    )
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Access-Control-Expose-Headers": "Content-Disposition",
+    }
+    return StreamingResponse(buf, media_type=media_type, headers=headers)
+
+
+# ── Continuous Model Training Endpoints ────────────────────────────────────────
+
+@app.post("/training/start", response_model=TrainingStartResponse)
+async def start_training(req: Optional[TrainingStartRequest] = None) -> TrainingStartResponse:
+    """Trigger background continuous model training workflow using historical AWS observations."""
+    mgr = _get_training_manager()
+    start_d = req.start_date if req else None
+    end_d = req.end_date if req else None
+    train_r = req.train_ratio if req and req.train_ratio else 0.70
+    val_r = req.val_ratio if req and req.val_ratio else 0.15
+
+    training_id = mgr.start_training_job(
+        start_date=start_d,
+        end_date=end_d,
+        train_ratio=train_r,
+        val_ratio=val_r,
+    )
+    return TrainingStartResponse(
+        status="started",
+        training_id=training_id,
+        message=f"Continuous model training job {training_id} started in background.",
+    )
+
+
+@app.get("/training/status", response_model=TrainingStatusResponse)
+async def get_training_status(training_id: Optional[str] = None) -> TrainingStatusResponse:
+    """Return status and progress of active or specified training job."""
+    mgr = _get_training_manager()
+    info = mgr.get_status(training_id=training_id)
+    return TrainingStatusResponse(**info)
+
+
+@app.get("/training/history", response_model=TrainingHistoryResponse)
+async def get_training_history(limit: int = 20) -> TrainingHistoryResponse:
+    """Return previous continuous model training runs."""
+    mgr = _get_training_manager()
+    runs = mgr.get_history(limit=limit)
+    return TrainingHistoryResponse(runs=runs, total=len(runs))
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("api.main:app", host="0.0.0.0", port=port, reload=True)
+

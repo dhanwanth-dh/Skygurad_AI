@@ -1,16 +1,16 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
   --color-bg-primary: transparent;
-  --color-bg-secondary: rgba(255, 255, 255, 0.4);
+  --color-bg-secondary: rgba(255, 255, 255, 0.6);
   
-  --color-card: rgba(255, 255, 255, 0.65);
-  --color-card-elevated: rgba(255, 255, 255, 0.85);
-  --color-card-dark: rgba(15, 23, 42, 0.7);
+  --color-card: rgba(255, 255, 255, 0.92);
+  --color-card-elevated: rgba(255, 255, 255, 0.98);
+  --color-card-dark: rgba(15, 23, 42, 0.92);
   
-  --color-border: rgba(255, 255, 255, 0.55);
-  --color-border-subtle: rgba(255, 255, 255, 0.4);
+  --color-border: rgba(226, 232, 240, 0.9);
+  --color-border-subtle: rgba(241, 245, 249, 0.8);
   --color-border-glow: rgba(14, 165, 233, 0.45);
   
   --color-text-primary: #0F172A;
@@ -20,18 +20,18 @@
   
   --color-accent: #0284C7;
   --color-accent-hover: #0369A1;
-  --color-accent-light: rgba(224, 242, 254, 0.7);
-  --color-accent-glow: rgba(14, 165, 233, 0.3);
+  --color-accent-light: rgba(224, 242, 254, 0.9);
+  --color-accent-glow: rgba(14, 165, 233, 0.35);
   
   --color-healthy: #10B981;
-  --color-healthy-light: rgba(236, 253, 245, 0.8);
+  --color-healthy-light: rgba(236, 253, 245, 0.9);
   --color-warning: #F59E0B;
-  --color-warning-light: rgba(254, 243, 199, 0.8);
+  --color-warning-light: rgba(254, 243, 199, 0.9);
   --color-danger: #F43F5E;
-  --color-danger-light: rgba(255, 228, 230, 0.8);
+  --color-danger-light: rgba(255, 228, 230, 0.9);
   --color-critical: #E11D48;
   --color-genuine: #8B5CF6;
-  --color-genuine-light: rgba(243, 232, 255, 0.8);
+  --color-genuine-light: rgba(243, 232, 255, 0.9);
   
   --font-sans: 'Plus Jakarta Sans', 'Outfit', system-ui, sans-serif;
   --font-display: 'Outfit', 'Plus Jakarta Sans', sans-serif;
@@ -53,35 +53,41 @@ html, body {
   min-height: 100vh;
 }
 
+#root {
+  background: transparent;
+}
+
 h1, h2, h3, h4, .font-heading {
   font-family: 'Outfit', 'Plus Jakarta Sans', sans-serif;
   letter-spacing: -0.02em;
 }
 
-/* Translucent Glassmorphism primitives */
+/* Premium High-Contrast Glassmorphic surfaces */
 .glass-panel {
-  background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  box-shadow: 0 12px 36px 0 rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.92) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 16px 40px 0 rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.6);
+  color: #0F172A;
 }
 
 .glass-card {
-  background: rgba(255, 255, 255, 0.60);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  box-shadow: 0 8px 30px -4px rgba(0, 0, 0, 0.07), 0 0 0 1px rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.94) !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 10px 32px -4px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.6);
   transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
   overflow: hidden;
+  color: #0F172A;
 }
 
 .glass-card:hover {
   transform: translateY(-4px);
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 20px 42px -6px rgba(14, 165, 233, 0.2), 0 0 0 1px rgba(14, 165, 233, 0.45);
+  background: rgba(255, 255, 255, 0.98) !important;
+  box-shadow: 0 20px 45px -6px rgba(14, 165, 233, 0.3), 0 0 0 1px rgba(14, 165, 233, 0.5);
   border-color: rgba(14, 165, 233, 0.5);
 }
 
@@ -96,7 +102,7 @@ h1, h2, h3, h4, .font-heading {
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
   transition: transform 0.65s ease;
   pointer-events: none;
 }
@@ -106,37 +112,39 @@ h1, h2, h3, h4, .font-heading {
 }
 
 .glass-pill {
-  background: rgba(255, 255, 255, 0.50);
+  background: rgba(255, 255, 255, 0.90) !important;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
 }
 
 .glass-button {
-  background: rgba(255, 255, 255, 0.60);
+  background: rgba(255, 255, 255, 0.92) !important;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(226, 232, 240, 0.9);
   transition: all 0.2s ease;
 }
 
 .glass-button:hover {
-  background: rgba(255, 255, 255, 0.85);
-  border-color: rgba(14, 165, 233, 0.4);
+  background: #ffffff !important;
+  border-color: rgba(14, 165, 233, 0.6);
   transform: translateY(-1px);
 }
 
 .glass-input {
-  background: rgba(255, 255, 255, 0.65) !important;
+  background: rgba(255, 255, 255, 0.95) !important;
   backdrop-filter: blur(12px) !important;
   -webkit-backdrop-filter: blur(12px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.7) !important;
+  border: 1px solid rgba(203, 213, 225, 0.9) !important;
+  color: #0F172A !important;
 }
 
 .glass-input:focus {
-  background: rgba(255, 255, 255, 0.9) !important;
+  background: #ffffff !important;
   border-color: #0284C7 !important;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15) !important;
 }
 
 /* Custom modern scrollbar */
@@ -148,14 +156,14 @@ h1, h2, h3, h4, .font-heading {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.45);
+  background: rgba(148, 163, 184, 0.6);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.7);
+  background: rgba(100, 116, 139, 0.85);
 }
 
-/* Leaflet map transparent container customization */
+/* Leaflet map styling */
 .leaflet-container {
   font-family: 'Plus Jakarta Sans', system-ui, sans-serif !important;
   background: transparent !important;
@@ -163,146 +171,76 @@ h1, h2, h3, h4, .font-heading {
 }
 
 .leaflet-popup-content-wrapper {
-  background: rgba(255, 255, 255, 0.88) !important;
+  background: rgba(255, 255, 255, 0.96) !important;
   backdrop-filter: blur(16px) !important;
   -webkit-backdrop-filter: blur(16px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.8) !important;
-  box-shadow: 0 16px 36px -4px rgba(15, 23, 42, 0.15) !important;
+  border: 1px solid rgba(255, 255, 255, 0.9) !important;
+  box-shadow: 0 16px 36px -4px rgba(15, 23, 42, 0.25) !important;
   border-radius: 14px !important;
   color: #0F172A !important;
 }
 
 .leaflet-popup-tip {
-  background: rgba(255, 255, 255, 0.88) !important;
+  background: rgba(255, 255, 255, 0.96) !important;
 }
 
-/* Contrast pass: preserve the existing layout while making the palette readable
-   over the animated background and across every secondary route. */
-html, body {
-  background: transparent;
-  color: #e8f1fb;
-}
-
-#root { background: transparent; }
-
-.glass-panel {
-  background: rgba(222, 235, 246, 0.72);
-  border-color: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 16px 36px rgba(3, 12, 24, 0.22), 0 0 0 1px rgba(24, 64, 96, 0.08);
-}
-
-.glass-card {
-  background: rgba(230, 240, 249, 0.76);
-  border-color: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 14px 32px rgba(3, 12, 24, 0.2), 0 0 0 1px rgba(24, 64, 96, 0.08);
-}
-
-.glass-card:hover {
-  background: rgba(244, 249, 253, 0.84);
-  border-color: rgba(14, 165, 233, 0.55);
-  box-shadow: 0 18px 38px rgba(3, 12, 24, 0.25), 0 0 0 1px rgba(14, 165, 233, 0.2);
-}
-
-.glass-pill,
-.glass-button,
-.glass-input {
-  background: rgba(241, 248, 253, 0.76);
-  border-color: rgba(255, 255, 255, 0.9);
-}
-
-.glass-button:hover {
-  background: rgba(255, 255, 255, 0.84);
-  border-color: rgba(14, 165, 233, 0.5);
-}
-
-.glass-input:focus {
-  background: #ffffff !important;
-  border-color: #0284c7 !important;
-}
-
+/* Card Text Contrast Enhancement */
 .glass-panel .text-slate-900,
-.glass-card .text-slate-900 { color: #091b31 !important; }
+.glass-card .text-slate-900 { color: #0F172A !important; }
 .glass-panel .text-slate-800,
-.glass-card .text-slate-800 { color: #102b46 !important; }
+.glass-card .text-slate-800 { color: #1E293B !important; }
 .glass-panel .text-slate-700,
-.glass-card .text-slate-700 { color: #203e5c !important; }
+.glass-card .text-slate-700 { color: #334155 !important; }
 .glass-panel .text-slate-600,
-.glass-card .text-slate-600 { color: #31516d !important; }
+.glass-card .text-slate-600 { color: #475569 !important; }
 .glass-panel .text-slate-500,
-.glass-card .text-slate-500 { color: #47647f !important; }
+.glass-card .text-slate-500 { color: #64748B !important; }
 .glass-panel .text-slate-400,
-.glass-card .text-slate-400 { color: #58738c !important; }
+.glass-card .text-slate-400 { color: #94A3B8 !important; }
 
-main .space-y-3 > .flex h2.text-slate-900 { color: #f1f7ff !important; }
-main .space-y-3 > .flex p.text-slate-500 { color: #a8bfd3 !important; }
-
-/* Make common translucent utility surfaces opaque enough for their existing text. */
-[class~="bg-white/45"],
-[class~="bg-white/50"],
-[class~="bg-white/60"],
-[class~="bg-white/70"],
-[class~="bg-white/75"],
-[class~="bg-white/80"],
-[class~="bg-white/90"] {
-  background-color: rgba(241, 248, 253, 0.76) !important;
-}
-
-[class~="border-white/40"],
-[class~="border-white/50"],
-[class~="border-white/60"] {
-  border-color: rgba(148, 163, 184, 0.38) !important;
-}
-
-/* The navigation is the dark frame of the application, so its existing
-   slate labels need the inverse text treatment. */
-aside.fixed.top-0.left-0 {
-  background: rgba(7, 17, 31, 0.78) !important;
-  border-right-color: rgba(148, 163, 184, 0.28) !important;
-}
-
-aside.fixed.top-0.left-0 .text-slate-900 { color: #f3f8ff !important; }
-aside.fixed.top-0.left-0 .text-slate-800 { color: #e1edf8 !important; }
-aside.fixed.top-0.left-0 .text-slate-700 { color: #c1d1e1 !important; }
-aside.fixed.top-0.left-0 .text-slate-600 { color: #a2b7ca !important; }
-aside.fixed.top-0.left-0 .text-slate-500 { color: #8da6bc !important; }
-aside.fixed.top-0.left-0 .text-slate-400 { color: #7892aa !important; }
-aside.fixed.top-0.left-0 [class~="bg-white/45"],
-aside.fixed.top-0.left-0 [class~="bg-white/55"] {
-  background-color: rgba(18, 35, 54, 0.72) !important;
-  border-color: rgba(148, 163, 184, 0.22) !important;
-}
-
-aside.fixed.top-0.left-0 [class~="bg-white/90"] {
-  background-color: #eaf5ff !important;
-  color: #075985 !important;
-  border-color: rgba(56, 189, 248, 0.7) !important;
-}
-
-/* The top application bar stays dark for hierarchy and readability. */
+/* Dark Navigation Bar & Frame */
 header {
-  background: rgba(7, 17, 31, 0.72) !important;
-  border-bottom-color: rgba(148, 163, 184, 0.24) !important;
+  background: rgba(3, 10, 20, 0.88) !important;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.6) !important;
 }
 
-header .text-slate-900 { color: #f3f8ff !important; }
-header .text-slate-800 { color: #e1edf8 !important; }
-header .text-slate-700 { color: #c1d1e1 !important; }
-header .text-slate-600 { color: #a2b7ca !important; }
-header .text-slate-500 { color: #8da6bc !important; }
+aside {
+  background: rgba(3, 10, 20, 0.92) !important;
+  border-right: 1px solid rgba(51, 65, 85, 0.6) !important;
+}
 
-.header-network,
-.header-network .text-slate-800,
-.header-network .text-slate-700,
-.header-network .text-slate-600,
-.header-network .text-slate-500,
-.header-network .text-slate-400,
-.header-sync { color: #23425e !important; }
+/* Header elements high contrast */
+.header-network {
+  background: rgba(15, 23, 42, 0.9) !important;
+  border: 1px solid rgba(56, 189, 248, 0.35) !important;
+  color: #F8FAFC !important;
+}
+.header-network span {
+  color: #F8FAFC !important;
+}
+.header-network .text-sky-300,
+.header-network .font-mono {
+  color: #38BDF8 !important;
+}
 
-/* Keep the world video visible while preserving a calm, readable atmosphere. */
+.header-sync {
+  background: rgba(15, 23, 42, 0.9) !important;
+  border: 1px solid rgba(148, 163, 184, 0.4) !important;
+  color: #FFFFFF !important;
+}
+.header-sync span {
+  color: #FFFFFF !important;
+}
+.header-sync:hover {
+  background: rgba(30, 41, 59, 0.95) !important;
+  border-color: rgba(56, 189, 248, 0.6) !important;
+}
+
+/* Background Atmosphere Video Underlay */
 .fixed.inset-0.-z-20 > div:nth-of-type(1) {
-  background: linear-gradient(135deg, rgba(3, 13, 27, 0.24), rgba(8, 31, 53, 0.16), rgba(3, 13, 27, 0.28)) !important;
+  background: linear-gradient(135deg, rgba(3, 13, 27, 0.20), rgba(8, 31, 53, 0.12), rgba(3, 13, 27, 0.24)) !important;
 }
 
 .fixed.inset-0.-z-20 > div:nth-of-type(2) {
-  background: radial-gradient(ellipse at 50% 30%, rgba(7, 17, 31, 0.16) 0%, rgba(7, 17, 31, 0.42) 100%) !important;
+  background: radial-gradient(ellipse at 50% 30%, rgba(7, 17, 31, 0.12) 0%, rgba(7, 17, 31, 0.35) 100%) !important;
 }

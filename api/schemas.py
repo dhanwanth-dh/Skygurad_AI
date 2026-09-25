@@ -81,19 +81,11 @@ class HealthResponse(BaseModel):
 class ModelRegistryItem(BaseModel):
     model_config = {"protected_namespaces": ()}
 
-    name: str
-    type: str
-    target: Optional[str] = None
-    enabled: bool
+    model_name: str
+    category: str
     status: str
     weight: Optional[float] = None
-    weights: Optional[dict[str, float]] = None
-    val_mae: Optional[float] = None
-    val_rmse: Optional[float] = None
-    val_r2: Optional[float] = None
-    training_samples: int
-    purpose: str
-    safety_note: Optional[str] = None
+    val_metric: Optional[str] = None
 
 
 class ModelInfoResponse(BaseModel):
@@ -216,3 +208,72 @@ class HistoryResponse(BaseModel):
     station_id: str
     records: list[HistoryRecord]
     total: int
+
+
+# ── Historical & Continuous Training Schemas ───────────────────────────────────
+
+class HistoricalStatusResponse(BaseModel):
+    available: bool
+    stations: int
+    records: int
+    oldest_observation: Optional[str] = None
+    latest_observation: Optional[str] = None
+    years_available: float = 0.0
+    last_sync: Optional[str] = None
+    target_historical_years: Optional[int] = 15
+    db_path: Optional[str] = None
+
+
+class AdaptiveHistoryPoint(BaseModel):
+    timestamp: str
+    temperature_c: Optional[float] = None
+    relative_humidity_pct: Optional[float] = None
+    pressure_hpa: Optional[float] = None
+    wind_speed_kmh: Optional[float] = None
+    rainfall_mm: Optional[float] = None
+    ground_truth_label: Optional[str] = None
+    fault_description: Optional[str] = None
+
+
+class AdaptiveHistoryResponse(BaseModel):
+    station_id: str
+    total_records: int
+    displayed_points: int
+    points: list[dict[str, Any]]
+    anomalies: list[dict[str, Any]]
+    latest_observation: Optional[dict[str, Any]] = None
+
+
+class TrainingStartRequest(BaseModel):
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    train_ratio: Optional[float] = 0.70
+    val_ratio: Optional[float] = 0.15
+
+
+class TrainingStartResponse(BaseModel):
+    status: str
+    training_id: str
+    message: str
+
+
+class TrainingStatusResponse(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
+    training_id: Optional[str] = None
+    model_version: Optional[str] = None
+    status: str
+    progress: float = 0.0
+    records_processed: int = 0
+    stations: int = 0
+    current_stage: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    metrics: Optional[dict[str, Any]] = None
+    error: Optional[str] = None
+
+
+class TrainingHistoryResponse(BaseModel):
+    runs: list[dict[str, Any]]
+    total: int
+

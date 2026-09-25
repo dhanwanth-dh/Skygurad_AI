@@ -2,13 +2,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { Bell, RefreshCw } from 'lucide-react'
 import { api } from '../services/api'
-import { MOCK_STATIONS, MOCK_PREDICTION } from '../data/mockData'
+import { MOCK_ANOMALIES_RESPONSE } from '../data/mockData'
 import { AlertCard } from '../components/AlertCard'
 import { LoadingSkeleton } from '../components/LoadingSkeleton'
 import { ErrorState, EmptyState } from '../components/EmptyState'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK_DATA === 'true'
-const STATIONS = MOCK_STATIONS
 const FILTERS = ['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
 
 export default function Alerts() {
@@ -21,29 +20,12 @@ export default function Alerts() {
     setLoading(true)
     setError(null)
     try {
-      let results
       if (USE_MOCK) {
-        results = STATIONS.map(s => ({ ...MOCK_PREDICTION, station_id: s.station_id }))
+        setPredictions(MOCK_ANOMALIES_RESPONSE.anomalies)
       } else {
-        const settled = await Promise.allSettled(
-          STATIONS.map(s =>
-            api.predict({
-              timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),
-              station_id: s.station_id,
-              station_name: s.station_name,
-              latitude: s.latitude,
-              longitude: s.longitude,
-              temperature_c: s.temperature_c,
-              relative_humidity_pct: s.relative_humidity_pct,
-              pressure_hpa: s.pressure_hpa,
-              wind_speed_kmh: s.wind_speed_kmh,
-              rainfall_mm: s.rainfall_mm,
-            })
-          )
-        )
-        results = settled.filter(r => r.status === 'fulfilled').map(r => r.value)
+        const data = await api.getAnomalies()
+        setPredictions(data?.anomalies ?? [])
       }
-      setPredictions(results.filter(p => p.prediction !== 'NORMAL'))
     } catch (e) {
       setError(e.message)
     } finally {

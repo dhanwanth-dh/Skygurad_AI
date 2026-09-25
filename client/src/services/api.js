@@ -20,4 +20,19 @@ export const api = {
   getStations: () => request('/stations'),
   getAnomalies: () => request('/anomalies'),
   getStationHistory: (stationId) => request(`/stations/${encodeURIComponent(stationId)}/history`),
+  getHistoricalStatus: () => request('/historical/status'),
+  getHistoricalStationData: (stationId, params = {}) => {
+    const q = new URLSearchParams(params).toString()
+    return request(`/historical/stations/${encodeURIComponent(stationId)}${q ? `?${q}` : ''}`)
+  },
+  getHistoricalExportUrl: (params = {}) => {
+    const q = new URLSearchParams(params).toString()
+    return `${BASE_URL}/historical/export${q ? `?${q}` : ''}`
+  },
+  startTraining: (params = {}) =>
+    request('/training/start', { method: 'POST', body: JSON.stringify(params) }),
+  getTrainingStatus: (trainingId) =>
+    request(`/training/status${trainingId ? `?training_id=${encodeURIComponent(trainingId)}` : ''}`),
+  getTrainingHistory: () => request('/training/history'),
 }
+

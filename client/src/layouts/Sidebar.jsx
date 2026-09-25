@@ -3,6 +3,7 @@ import {
   LayoutDashboard, Radio, AlertTriangle, Bell,
   BarChart2, Cpu, Activity, X, FlaskConical, Shield
 } from 'lucide-react'
+import { useStations } from '../hooks/useApi'
 
 const NAV = [
   {
@@ -26,12 +27,15 @@ const NAV = [
 ]
 
 export function Sidebar({ open, onClose }) {
+  const { data: stationsData } = useStations()
+  const stationCount = stationsData?.stations?.length ?? stationsData?.total ?? 0
+
   return (
     <>
       {/* Mobile overlay */}
       {open && (
         <div
-          className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-sm lg:hidden transition-opacity"
+          className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm lg:hidden transition-opacity"
           onClick={onClose}
         />
       )}
@@ -42,26 +46,26 @@ export function Sidebar({ open, onClose }) {
           transition-transform duration-300 ease-out
           lg:static lg:translate-x-0
           ${open ? 'translate-x-0' : '-translate-x-full'}
-          w-64 bg-white/55 backdrop-blur-2xl border-r border-white/50 shadow-[4px_0_30px_rgba(0,0,0,0.06)]
+          w-64 bg-slate-950/90 backdrop-blur-2xl border-r border-slate-800/80 shadow-[4px_0_30px_rgba(0,0,0,0.3)]
         `}
       >
         {/* Brand Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-white/40">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-800/80">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/25 text-white">
               <Shield className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-base font-extrabold tracking-tight text-slate-900 font-heading">
-                SKYGUARD<span className="text-sky-500 font-bold ml-1">AI</span>
+              <div className="text-base font-extrabold tracking-tight text-white font-heading">
+                SKYGUARD<span className="text-sky-400 font-bold ml-1">AI</span>
               </div>
-              <div className="text-[10px] font-semibold tracking-widest text-slate-500 uppercase">
+              <div className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">
                 Multi-Model Engine
               </div>
             </div>
           </div>
           <button
-            className="lg:hidden p-1.5 rounded-xl hover:bg-white/40 text-slate-500 hover:text-slate-800 transition-colors"
+            className="lg:hidden p-1.5 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
             onClick={onClose}
             aria-label="Close menu"
           >
@@ -73,7 +77,7 @@ export function Sidebar({ open, onClose }) {
         <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-6">
           {NAV.map(({ group, items }) => (
             <div key={group}>
-              <div className="text-[10px] font-bold tracking-wider text-slate-500 px-3 mb-2 uppercase">
+              <div className="text-[10px] font-bold tracking-wider text-slate-400 px-3 mb-2 uppercase">
                 {group}
               </div>
               <div className="space-y-1">
@@ -85,8 +89,8 @@ export function Sidebar({ open, onClose }) {
                     onClick={onClose}
                     className={({ isActive }) =>
                       `group flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold tracking-wide transition-all duration-200 ${isActive
-                        ? 'bg-white/90 text-sky-700 shadow-sm border border-sky-300/70 backdrop-blur-md'
-                        : 'text-slate-700 hover:bg-white/40 hover:text-slate-950'}`
+                        ? 'bg-sky-500/20 text-sky-300 shadow-sm border border-sky-400/40 backdrop-blur-md'
+                        : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'}`
                     }
                   >
                     {({ isActive }) => (
@@ -94,12 +98,12 @@ export function Sidebar({ open, onClose }) {
                         <div className="flex items-center gap-3">
                           <Icon
                             size={17}
-                            className={`transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-sky-600' : 'text-slate-500 group-hover:text-slate-800'}`}
+                            className={`transition-transform duration-200 group-hover:scale-110 ${isActive ? 'text-sky-400' : 'text-slate-400 group-hover:text-white'}`}
                           />
                           <span>{label}</span>
                         </div>
                         {isActive && (
-                          <div className="w-2 h-2 rounded-full bg-sky-500 shadow-xs shadow-sky-500 animate-pulse" />
+                          <div className="w-2 h-2 rounded-full bg-sky-400 shadow-xs shadow-sky-400 animate-pulse" />
                         )}
                       </>
                     )}
@@ -111,16 +115,18 @@ export function Sidebar({ open, onClose }) {
         </nav>
 
         {/* Footer info badge */}
-        <div className="p-4 border-t border-white/40">
-          <div className="px-3.5 py-3 rounded-2xl bg-white/45 backdrop-blur-md border border-white/60 text-xs space-y-1 shadow-xs">
-            <div className="flex items-center justify-between font-bold text-slate-800">
+        <div className="p-4 border-t border-slate-800/80">
+          <div className="px-3.5 py-3 rounded-2xl bg-slate-900/90 backdrop-blur-md border border-slate-700/70 text-xs space-y-1 shadow-xs">
+            <div className="flex items-center justify-between font-bold text-slate-100">
               <span>Engine Status</span>
-              <span className="flex items-center gap-1.5 text-[11px] text-emerald-600 font-semibold">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping inline-block" />
+              <span className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-semibold">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
                 Active
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 font-medium">30 AWS Stations Â· v2.0</p>
+            <p className="text-[11px] text-slate-400 font-medium font-mono">
+              {stationCount > 0 ? `${stationCount} AWS Stations` : 'Live Stream'} · v2.0
+            </p>
           </div>
         </div>
       </aside>

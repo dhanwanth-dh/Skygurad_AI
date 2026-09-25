@@ -380,3 +380,214 @@ class SkyGuardPredictor:
             "trace": trace_steps,
             "model_version": self._model_version,
         }
+
+    def predict_batch(self, observations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Run full 16-step multi-model inference pipeline on a batch of observations with high vectorization."""
+        if not observations:
+            return []
+
+        df_orig = pd.DataFrame(observations)
+        df = df_orig.copy()
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        n_samples = len(df)
+
+        # ── Step 1: Preprocessing ────────────────────────────────────────────
+        df = run_preprocessing(df)
+
+        # ── Step 2: Feature Engineering ──────────────────────────────────────
+        if self._feature_builder is not None:
+            try:
+                df = self._feature_builder.transform(df)
+            except Exception as exc:
+                logger.warning("FeatureBuilder batch transform error: %s", exc)
+
+        # ── Step 3: Statistical Quality Control (QC) ─────────────────────────
+        qc_results = []
+        for i in range(n_samples):
+            qc_results.append(self._qc_engine.check_observation(df.iloc[i]))
+        df["statistical_anomaly_score"] = [r["statistical_anomaly_score"] for r in qc_results]
+
+        # ── Step 4 & 5: Expected-Value Ensembles & Agreement ────────────────
+        expected_values_list: list[dict[str, Any]] = [{} for _ in range(n_samples)]
+        expected_agreements_list: list[dict[str, float]] = [{} for _ in range(n_samples)]
+        active_models_expected = 0
+
+        for target in ["temperature_c", "relative_humidity_pct", "pressure_hpa"]:
+            model = self._expected_models.get(target)
+            if model is not None:
+                try:
+                    df = model.add_residuals(df)
+                    active_models_expected += 1
+                    for i in range(n_samples):
+                        pred_col = f"predicted_{target}"
+                        pred_val = float(df[pred_col].iloc[i]) if pred_col in df.columns else None
+                        if pred_val is not None and not np.isnan(pred_val):
+                            expected_values_list[i][target] = round(pred_val, 2)
+                        else:
+                            expected_values_list[i][target] = None
+
+                        ag_col = f"expected_{target}_model_agreement"
+                        ag_val = float(df[ag_col].iloc[i]) if ag_col in df.columns else 1.0
+                        expected_agreements_list[i][target] = round(ag_val, 4)
+                except Exception as exc:
+                    logger.warning("Expected model batch error on %s: %s", target, exc)
+                    for i in range(n_samples):
+                        expected_values_list[i][target] = None
+                        expected_agreements_list[i][target] = 0.5
+            else:
+                for i in range(n_samples):
+                    expected_values_list[i][target] = None
+                    expected_agreements_list[i][target] = 0.5
+
+        # ── Step 6 & 7: Anomaly Multi-Detector Ensemble & Consensus ──────────
+        if self._anomaly_detector is not None:
+            try:
+                df = self._anomaly_detector.transform(df)
+                anomaly_detailed_batch = self._anomaly_detector.score_detailed(df)
+            except Exception as exc:
+                logger.warning("AnomalyDetector batch error: %s", exc)
+                anomaly_detailed_batch = {
+                    "combined_anomaly_score": np.zeros(n_samples),
+                    "models_agreeing": np.zeros(n_samples, dtype=int),
+                    "total_models": 6,
+                    "consensus_score": np.zeros(n_samples),
+                    "individual_scores": {},
+                }
+        else:
+            anomaly_detailed_batch = {
+                "combined_anomaly_score": np.zeros(n_samples),
+                "models_agreeing": np.zeros(n_samples, dtype=int),
+                "total_models": 6,
+                "consensus_score": np.zeros(n_samples),
+                "individual_scores": {},
+            }
+
+        # ── Step 8 & 9: Fault Rules and Fault Evidence Engine ─────────────────
+        df = apply_fault_rules(df)
+
+        # ── Step 11 & 12: Master Evidence Fusion ──────────────────────────────
+        total_possible = 9.0
+        active_models_count = active_models_expected + int(anomaly_detailed_batch.get("total_models", 6))
+        coverage_ratio = min(1.0, active_models_count / total_possible)
+
+        comb_scores = np.atleast_1d(anomaly_detailed_batch.get("combined_anomaly_score", np.zeros(n_samples)))
+        models_agreeings = np.atleast_1d(anomaly_detailed_batch.get("models_agreeing", np.zeros(n_samples, dtype=int)))
+        consensus_scores = np.atleast_1d(anomaly_detailed_batch.get("consensus_score", np.zeros(n_samples)))
+        indiv_scores = anomaly_detailed_batch.get("individual_scores", {})
+        total_anom_models = int(np.atleast_1d(anomaly_detailed_batch.get("total_models", 6))[0])
+
+        enabled_models_list = [
+            "Ridge Regression", "Random Forest Regressor", "Extra Trees Regressor",
+            "XGBoost Regressor", "Gradient Boosting Regressor", "HistGradientBoostingRegressor",
+            "Isolation Forest", "Local Outlier Factor", "One-Class SVM",
+            "Elliptic Envelope", "Mahalanobis Distance", "Statistical Robust Z",
+            "Statistical QC Engine", "Fault Evidence Engine", "Genuine Weather Event Engine",
+            "Master Evidence Fusion",
+        ]
+
+        results = []
+        for i in range(n_samples):
+            row = df.iloc[i]
+            obs = observations[i]
+            station_id = str(obs.get("station_id", ""))
+            qc_result = qc_results[i]
+
+            anom_score_scalar = float(comb_scores[i]) if i < len(comb_scores) else 0.0
+            models_agg_i = int(models_agreeings[i]) if i < len(models_agreeings) else 0
+            cons_score_i = float(consensus_scores[i]) if i < len(consensus_scores) else 0.0
+
+            row_anomaly_detailed = {
+                "combined_anomaly_score": anom_score_scalar,
+                "models_agreeing": models_agg_i,
+                "total_models": total_anom_models,
+                "consensus_score": cons_score_i,
+                "individual_scores": {
+                    k: np.array([float(v[i])]) if i < len(v) else np.array([0.0])
+                    for k, v in indiv_scores.items()
+                },
+            }
+
+            is_anom_prelim = bool(
+                anom_score_scalar > 0.35
+                or float(qc_result.get("statistical_anomaly_score", 0.0)) > 0.35
+                or bool(row.get("rule_any_fault", False))
+            )
+            fault_result = self._fault_engine.evaluate(row, is_anomaly=is_anom_prelim)
+            event_result = self._weather_event_engine.evaluate(row, anomaly_score=anom_score_scalar)
+
+            fused = self._master_fusion.fuse(
+                observation=obs,
+                expected_results={
+                    "temp_agreement": expected_agreements_list[i].get("temperature_c", 1.0),
+                    "humidity_agreement": expected_agreements_list[i].get("relative_humidity_pct", 1.0),
+                    "pressure_agreement": expected_agreements_list[i].get("pressure_hpa", 1.0),
+                },
+                anomaly_results=row_anomaly_detailed,
+                qc_results=qc_result,
+                fault_results=fault_result,
+                event_results=event_result,
+                model_coverage_ratio=coverage_ratio,
+            )
+
+            health = self._health_scores.get(station_id, {"health_score": 100.0, "status": "HEALTHY"})
+
+            correction: dict[str, Any] = {}
+            if fused["prediction"] == "SENSOR_FAULT" and fused["confidence"] >= 0.75:
+                for target, exp_val in expected_values_list[i].items():
+                    if exp_val is not None:
+                        obs_val = float(obs.get(target, np.nan))
+                        correction[target] = {
+                            "observed": obs_val,
+                            "estimated": exp_val,
+                            "correction_applied": True,
+                            "correction_confidence": round(fused["confidence"], 3),
+                            "residual": round(obs_val - exp_val, 2) if not np.isnan(obs_val) else 0.0,
+                        }
+
+            anomaly_consensus_dict = {
+                "models_agreeing": models_agg_i,
+                "models_total": total_anom_models,
+                "score": round(cons_score_i, 4),
+                "detector_scores": {
+                    k: round(float(v[i]), 4)
+                    for k, v in indiv_scores.items()
+                    if i < len(v)
+                },
+            }
+
+            results.append({
+                "station_id": station_id,
+                "timestamp": str(obs.get("timestamp", "")),
+                "prediction": fused["prediction"],
+                "confidence": round(fused["confidence"], 4),
+                "confidence_level": fused["confidence_level"],
+                "uncertainty_score": round(fused["uncertainty_score"], 4),
+                "class_probabilities": {k: round(v, 4) for k, v in fused["class_probabilities"].items()},
+                "anomaly_score": round(fused["anomaly_score"], 4),
+                "anomaly_consensus": anomaly_consensus_dict,
+                "model_agreement": round(fused["model_agreement"], 4),
+                "model_coverage": fused["model_coverage"],
+                "fault_type": fused["fault_type"],
+                "fault_confidence": round(fused["fault_confidence"], 4),
+                "fault_evidence": fused["fault_evidence"],
+                "genuine_event_score": round(fused["genuine_event_score"], 4),
+                "genuine_event_evidence": fused["genuine_event_evidence"],
+                "severity": fused["severity"],
+                "sensor_health": float(health.get("health_score", 100.0)),
+                "sensor_health_status": str(health.get("status", "HEALTHY")),
+                "expected_values": expected_values_list[i],
+                "observed_values": {
+                    k: float(obs.get(k, np.nan))
+                    for k in ["temperature_c", "relative_humidity_pct", "pressure_hpa",
+                              "wind_speed_kmh", "rainfall_mm"]
+                },
+                "top_reasons": fused["top_reasons"],
+                "recommended_action": fused["recommended_action"],
+                "correction": correction,
+                "enabled_models": enabled_models_list,
+                "trace": [],
+                "model_version": self._model_version,
+            })
+
+        return results
+
